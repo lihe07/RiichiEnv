@@ -60,7 +60,7 @@ pub fn calculate_yaku(hand: &Hand, melds: &[Meld], ctx: &YakuContext, win_tile: 
             if is_13_wait {
                 best_res.han = 26;
                 best_res.yakuman_count = 2;
-                best_res.yaku_ids.push(46);
+                best_res.yaku_ids.push(49);
                 best_res.yaku_names.push("Kokushi Musou 13-wait".to_string());
             } else {
                 best_res.han = 13;
@@ -167,13 +167,13 @@ pub fn calculate_yaku(hand: &Hand, melds: &[Meld], ctx: &YakuContext, win_tile: 
             // Toitoi
             let koutsu_total = div.body.iter().filter(|m| match m { Mentsu::Koutsu(_) => true, _ => false }).count()
                              + melds.iter().filter(|m| m.meld_type != crate::types::MeldType::Chi).count();
-            if koutsu_total == 4 { res.han += 2; res.yaku_ids.push(20); res.yaku_names.push("Toitoi".to_string()); }
+            if koutsu_total == 4 { res.han += 2; res.yaku_ids.push(21); res.yaku_names.push("Toitoi".to_string()); }
 
             // San Ankou
             let mut closed_koutsu_count = 0;
             for (idx, m) in div.body.iter().enumerate() {
                 if let Mentsu::Koutsu(_) = m {
-                    // Ron on closed triplet makes it open
+                    // Ron on closed triplet makes it open (if it was part of a Shanpon wait)
                     if !ctx.is_tsumo && Some(idx) == wg_idx { continue; }
                     closed_koutsu_count += 1;
                 }
@@ -185,7 +185,7 @@ pub fn calculate_yaku(hand: &Hand, melds: &[Meld], ctx: &YakuContext, win_tile: 
             }
             if closed_koutsu_count == 3 {
                 res.han += 2;
-                res.yaku_ids.push(21);
+                res.yaku_ids.push(22);
                 res.yaku_names.push("San Ankou".to_string());
             }
 
@@ -193,7 +193,7 @@ pub fn calculate_yaku(hand: &Hand, melds: &[Meld], ctx: &YakuContext, win_tile: 
             let kantsu_count = melds.iter().filter(|m| m.meld_type == crate::types::MeldType::Gang || m.meld_type == crate::types::MeldType::Angang || m.meld_type == crate::types::MeldType::Addgang).count();
             if kantsu_count == 3 {
                 res.han += 2;
-                res.yaku_ids.push(22);
+                res.yaku_ids.push(20);
                 res.yaku_names.push("San Kantsu".to_string());
             }
 
@@ -543,7 +543,7 @@ fn apply_yakuman(res: &mut YakuResult, hand: &Hand, melds: &[Meld], ctx: &YakuCo
             let is_9_wait = is_chuuren_9_wait(hand, win_tile);
             if is_9_wait {
                 yakuman_count += 2;
-                res.yaku_ids.push(48);
+                res.yaku_ids.push(47);
                 res.yaku_names.push("Chuuren Poutou 9-wait".to_string());
             } else {
                 yakuman_count += 1;
@@ -583,7 +583,7 @@ fn apply_yakuman(res: &mut YakuResult, hand: &Hand, melds: &[Meld], ctx: &YakuCo
     if closed_koutsu_count == 4 {
         if wg_idx.is_none() {
             yakuman_count += 2;
-            res.yaku_ids.push(47); // Su Ankou Tanki
+            res.yaku_ids.push(48); // Su Ankou Tanki
             res.yaku_names.push("Su Ankou Tanki".to_string());
         } else {
             yakuman_count += 1;

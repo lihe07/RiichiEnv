@@ -60,6 +60,9 @@ class Round:
         self.ju = new_round_data["ju"] # 局
         self.ben = new_round_data["ben"] # 本場
         self.liqibang = new_round_data["liqibang"] # 供託
+        
+        self.kakan_tile = None
+        self.last_action_was_kakan = False
 
     def __str__(self) -> str:
         return f"Round(chang={self.chang}, ju={self.ju}, ben={self.ben}, liqibang={self.liqibang})"
@@ -153,14 +156,16 @@ class Round:
                 ura_indicators = self._get_tiles(hule["li_doras"])
 
             # 和了判定の計算
-            is_chankan = any(f["id"] == 3 for f in hule.get("fans", []))
+            # Determine chankan based on simulation
+            is_chankan = False
+            if not is_zimo and self.last_action_was_kakan:
+                # Use 34-tile IDs for comparison to handle aka dora etc.
+                hu_tile_34 = self._get_tile(hule["hu_tile"]) // 4
+                kakan_tile_34 = self._get_tile(self.kakan_tile) // 4
+                if hu_tile_34 == kakan_tile_34:
+                    is_chankan = True
             
-            # Chankan robbery doesn't break Ippatsu if it's the first turn
             actual_ippatsu = self.ippatsu[seat]
-            if is_chankan and hule["liqi"]:
-                # If MJSoul says Ippatsu (ID 30) is there, force it
-                if any(f["id"] == 30 for f in hule.get("fans", [])):
-                    actual_ippatsu = True
 
             agari_calc = AgariCalculator(
                 tiles=hola_tiles,
@@ -202,6 +207,7 @@ class Round:
                     print(f"Hand: {hule['hand']} + {hule['hu_tile']}")
                     print(f"Melds: {self.melds[seat]}")
                     print(f"Liqi: {self.liqi[seat]}")
+                    print(f"Sim Conditions: ippatsu={actual_ippatsu}, chankan={is_chankan}, first_turn={self.is_first_turn[seat]}, rinshan={self.rinshan[seat]}")
                     print(f"Expected: Han={hule['count']}, Fans={hule['fans']}")
                     print(f"Actual: Han={r2.han}, Yaku IDs={r2.yaku}, Fu={r2.fu}")
                 assert r2.han == hule["count"]
@@ -229,6 +235,13 @@ class Round:
 
         if name != "Hule":
             self.rinshan = [False] * 4
+            
+        if name not in ["Hule", "AnGangAddGang", "NoTile", "LiuJu"]:
+            if self.last_action_was_kakan:
+                self.ippatsu = [False] * 4
+                self.is_first_turn = [False] * 4
+                self.last_action_was_kakan = False
+                self.kakan_tile = None
 
         match name:
             case "DiscardTile":
@@ -271,12 +284,12 @@ class Round:
                 self.melds[data["seat"]].append((meld_type, meld_tiles))
 
             case "AnGangAddGang":
-                # 副露による一発消し / 第一ツモ消し
-                self.ippatsu = [False] * 4
-                self.is_first_turn = [False] * 4
-
                 if data["type"] == 3:
                     # 暗槓
+                    self.ippatsu = [False] * 4
+                    self.is_first_turn = [False] * 4
+                    self.last_action_was_kakan = False
+                    
                     tiles_ = [data["tiles"]] * 4
                     if data["tiles"][0] in ["0", "5"] and data["tiles"][1] != "z":
                         tiles_ = ["5" + data["tiles"][1]] * 3 + ["0" + data["tiles"][1]]
@@ -284,9 +297,13 @@ class Round:
                     self.melds[data["seat"]].append((MeldType.ANGANG, tiles_))
                 elif data["type"] == 2:
                     # 加槓
+                    # Do not clear ippatsu yet, robbery might happen in Hule
+                    self.last_action_was_kakan = True
+                    self.kakan_tile = data["tiles"]
+                    # We append it for now, _get_melds_for_mahjong_lib will consolidate it
                     self.melds[data["seat"]].append((MeldType.ADDGANG, [data["tiles"]]))
                 else:
-                    assert False, "Invalid AnGangAddGang type"
+                    assert False, f"Invalid AnGangAddGang type {data['type']}"
 
             case "NoTile":
                 pass
