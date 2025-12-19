@@ -1,0 +1,15 @@
+[package]
+name = "riichienv"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "_riichienv"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3 = { version = "0.22" }
+
+[features]
+default = ["extension-module"]
+extension-module = ["pyo3/extension-module"]

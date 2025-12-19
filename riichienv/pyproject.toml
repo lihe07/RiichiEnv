@@ -1,0 +1,24 @@
+[project]
+name = "riichienv"
+version = "0.1.0"
+description = "A Modular, High-Performance Research Environment for Riichi Mahjong"
+readme = "README.md"
+requires-python = "==3.13.*"
+dependencies = [
+    "mahjong==1.4.0",
+    "pyyaml>=6.0.3",
+]
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+python-source = "src"
+module-name = "riichienv._riichienv"
+
+[dependency-groups]
+dev = ["pytest"]
+
+[project.scripts]
+test = "pytest:console_main"
