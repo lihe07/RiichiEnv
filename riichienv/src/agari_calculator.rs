@@ -60,7 +60,7 @@ impl AgariCalculator {
         }
     }
 
-    pub fn calc(&self, win_tile_136: u8, dora_indicators_136: Vec<u8>, conditions: Conditions) -> Agari {
+    pub fn calc(&self, win_tile_136: u8, dora_indicators_136: Vec<u8>, ura_indicators_136: Vec<u8>, conditions: Conditions) -> Agari {
         let win_tile_34 = win_tile_136 / 4;
         let is_agari = agari::is_agari(&self.hand);
         if !is_agari {
@@ -76,8 +76,9 @@ impl AgariCalculator {
         ctx.is_houtei = conditions.houtei;
         ctx.is_rinshan = conditions.rinshan;
         ctx.is_chankan = conditions.chankan;
+        ctx.is_tsumo_first_turn = conditions.tsumo_first_turn;
         
-        // Count doras
+        // Count normal doras
         let mut dora_count = 0;
         for &indicator_136 in &dora_indicators_136 {
             let next_tile_34 = get_next_tile(indicator_136 / 4);
@@ -85,6 +86,14 @@ impl AgariCalculator {
         }
         ctx.dora_count = dora_count;
         ctx.aka_dora = self.aka_dora_count;
+
+        // Count ura doras
+        let mut ura_dora_count = 0;
+        for &indicator_136 in &ura_indicators_136 {
+            let next_tile_34 = get_next_tile(indicator_136 / 4);
+            ura_dora_count += self.full_hand.counts[next_tile_34 as usize];
+        }
+        ctx.ura_dora_count = ura_dora_count;
 
         ctx.bakaze = 27 + conditions.round_wind;
         ctx.jikaze = 27 + conditions.player_wind;
@@ -97,7 +106,7 @@ impl AgariCalculator {
 
         Agari {
             agari: true,
-            yakuman: yaku_res.han >= 13,
+            yakuman: yaku_res.yakuman_count > 0,
             ron_agari: score_res.pay_ron,
             tsumo_agari_oya: score_res.pay_tsumo_oya,
             tsumo_agari_ko: score_res.pay_tsumo_ko,

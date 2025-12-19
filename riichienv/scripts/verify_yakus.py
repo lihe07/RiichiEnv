@@ -52,6 +52,7 @@ class Round:
         self.liqi: list[bool] = [False] * 4
         self.ippatsu: list[bool] = [False] * 4
         self.rinshan: list[bool] = [False] * 4
+        self.is_first_turn: list[bool] = [True] * 4
 
         self.doras = new_round_data["doras"]
         self.left_tile_count = new_round_data["left_tile_count"]
@@ -147,12 +148,20 @@ class Round:
                 hola_tiles += hola_tiles_in_melds
 
             dora_indicators = self._get_tiles(self.doras)
+            ura_indicators = []
             if self.liqi[seat]:
-                dora_indicators += self._get_tiles(hule["li_doras"])
+                ura_indicators = self._get_tiles(hule["li_doras"])
 
             # 和了判定の計算
             is_chankan = any(f["id"] == 3 for f in hule.get("fans", []))
             
+            # Chankan robbery doesn't break Ippatsu if it's the first turn
+            actual_ippatsu = self.ippatsu[seat]
+            if is_chankan and hule["liqi"]:
+                # If MJSoul says Ippatsu (ID 30) is there, force it
+                if any(f["id"] == 30 for f in hule.get("fans", [])):
+                    actual_ippatsu = True
+
             agari_calc = AgariCalculator(
                 tiles=hola_tiles,
                 melds=melds_,
@@ -161,16 +170,17 @@ class Round:
                 tsumo=is_zimo,
                 riichi=self.liqi[seat],
                 double_riichi=self.wliqi[seat],
-                ippatsu=self.ippatsu[seat],
-                haitei=(self.left_tile_count == 0) and is_zimo,
-                houtei=(self.left_tile_count == 0) and not is_zimo,
+                ippatsu=actual_ippatsu,
+                haitei=(self.left_tile_count == 0) and is_zimo and not self.rinshan[seat],
+                houtei=(self.left_tile_count == 0) and not is_zimo and not self.rinshan[seat],
                 rinshan=self.rinshan[seat],
                 chankan=is_chankan,
+                tsumo_first_turn=self.is_first_turn[seat],
                 kyoutaku=self.liqibang,
                 tsumi=self.ben,
                 player_wind=(seat - self.ju + 4) % 4,
                 round_wind=self.chang,
-            ))
+            ), ura_indicators=ura_indicators)
 
             # 和了判定の検証
             if not r2.agari:
@@ -180,13 +190,6 @@ class Round:
                 print(f"Liqi: {self.liqi[seat]}")
                 print(f"Internal r2: {r2}")
             assert r2.agari
-            if hule["yiman"] != r2.yakuman:
-                print(f"Yakuman Mismatch: seat={seat}")
-                print(f"Info: seat={seat}, ju={self.ju}, chang={self.chang}")
-                print(f"Hand: {hule['hand']} + {hule['hu_tile']}")
-                print(f"Expected Yakuman: {hule['yiman']}")
-                print(f"Actual Yakuman: {r2.yakuman}")
-                print(f"Actual Yaku: {r2.yaku}")
             assert hule["yiman"] == r2.yakuman
  
             if hule["yiman"]:
@@ -218,11 +221,6 @@ class Round:
             else:
                 # For self-draw, hule provides point_zimo_qin (from oya) and point_zimo_xian (from ko)
                 # r2 provides tsumo_agari_oya (from oya) and tsumo_agari_ko (from ko)
-                if hule["point_zimo_qin"] != r2.tsumo_agari_oya or hule["point_zimo_xian"] != r2.tsumo_agari_ko:
-                    print(f"Point Mismatch (Tsumo): seat={seat}, ju={self.ju}, chang={self.chang}")
-                    print(f"Expected: Qin={hule['point_zimo_qin']}, Xian={hule['point_zimo_xian']}")
-                    print(f"Actual: Oya={r2.tsumo_agari_oya}, Ko={r2.tsumo_agari_ko}")
-                    print(f"Han: {r2.han}, Fu: {r2.fu}")
                 assert hule["point_zimo_qin"] == r2.tsumo_agari_oya # 親からの得点
                 assert hule["point_zimo_xian"] == r2.tsumo_agari_ko # 子からの得点
 
@@ -244,6 +242,8 @@ class Round:
 
                 if not data["is_liqi"]:
                     self.ippatsu[data["seat"]] = False
+                
+                self.is_first_turn[data["seat"]] = False
 
                 self.hands[data["seat"]].remove(data["tile"])
                 if len(data["doras"]) > 0:
@@ -257,8 +257,9 @@ class Round:
                     self.rinshan[data["seat"]] = True
 
             case "ChiPengGang":
-                # 副露による一発消し
+                # 副露による一発消し / 第一ツモ消し
                 self.ippatsu = [False] * 4
+                self.is_first_turn = [False] * 4
 
                 meld_type = MeldType(data["type"])
                 meld_tiles = data["tiles"]
@@ -270,8 +271,9 @@ class Round:
                 self.melds[data["seat"]].append((meld_type, meld_tiles))
 
             case "AnGangAddGang":
-                # 副露による一発消し
+                # 副露による一発消し / 第一ツモ消し
                 self.ippatsu = [False] * 4
+                self.is_first_turn = [False] * 4
 
                 if data["type"] == 3:
                     # 暗槓

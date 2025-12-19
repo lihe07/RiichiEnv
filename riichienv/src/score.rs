@@ -22,7 +22,7 @@ pub fn calculate_score(han: u8, fu: u8, is_oya: bool, is_tsumo: bool) -> Score {
             6 | 7 => 3000, // Haneman
             8 | 9 | 10 => 4000, // Baiman
             11 | 12 => 6000, // Sanbaiman
-            _ => 8000, // Yakuman (13+)
+            _ => 8000 * (han as u32 / 13), // Yakuman (13, 26, 39, ...)
         };
         make_score_result(base_points, is_oya, is_tsumo)
     } else {

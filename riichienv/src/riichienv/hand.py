@@ -117,6 +117,7 @@ class Conditions:
     houtei: bool = False
     rinshan: bool = False
     chankan: bool = False
+    tsumo_first_turn: bool = False
 
     player_wind: int = 0 # E,S,W,N = (0,1,2,3)
     round_wind: int = 0 # E,S,W,N = (0,1,2,3)
@@ -210,7 +211,7 @@ class AgariCalculator:
         return result
 
     @staticmethod
-    def calc_from_text(hand_str_repr_with_win_tile: str, dora_indicators: str | None = None, conditions: Conditions = Conditions()) -> Agari:
+    def calc_from_text(hand_str_repr_with_win_tile: str, dora_indicators: str | None = None, conditions: Conditions = Conditions(), ura_indicators: str | None = None) -> Agari:
         """
         hand_str_repr_with_win_tile: str は 14 枚分の牌を想定する。最後の1枚を win_tile として扱う。
         """
@@ -240,7 +241,12 @@ class AgariCalculator:
              dora_inds, _ = rust_core.parse_hand(dora_indicators)
              dora_inds.sort()
              
-        return calc.calc(win_tile, dora_inds, conditions)
+        ura_inds = []
+        if ura_indicators:
+             ura_inds, _ = rust_core.parse_hand(ura_indicators)
+             ura_inds.sort()
+             
+        return calc.calc(win_tile, dora_inds, conditions, ura_inds)
 
     def _tiles_to_string(self, tiles: list[int]) -> str:
         # Group by suit: m, p, s, z
@@ -338,7 +344,7 @@ class AgariCalculator:
         
         return f"({prefix}{digits}{suffix}0)" # Fake index 0
 
-    def calc(self, win_tile: int, dora_indicators: list[int] = None, conditions: Conditions = Conditions()) -> Agari:
+    def calc(self, win_tile: int, dora_indicators: list[int] = None, conditions: Conditions = Conditions(), ura_indicators: list[int] = None) -> Agari:
         rust_conditions = rust_core.Conditions(
             tsumo=conditions.tsumo,
             riichi=conditions.riichi,
@@ -348,6 +354,7 @@ class AgariCalculator:
             houtei=conditions.houtei,
             rinshan=conditions.rinshan,
             chankan=conditions.chankan,
+            tsumo_first_turn=conditions.tsumo_first_turn,
             player_wind=conditions.player_wind,
             round_wind=conditions.round_wind,
             kyoutaku=conditions.kyoutaku,
@@ -355,6 +362,7 @@ class AgariCalculator:
         )
         
         dora_inds_136 = dora_indicators if dora_indicators else []
+        ura_inds_136 = ura_indicators if ura_indicators else []
 
         # Determine if we need to add the win tile to a temporary calculator
         # Rust AgariCalculator expects 14 tiles (strictly).
@@ -370,7 +378,7 @@ class AgariCalculator:
             # Recreate calculator with 14 tiles
             calc_obj = rust_core.AgariCalculator(temp_tiles, rust_melds)
         
-        res = calc_obj.calc(win_tile, dora_inds_136, rust_conditions)
+        res = calc_obj.calc(win_tile, dora_inds_136, ura_inds_136, rust_conditions)
         
         if not res.agari:
             return Agari(agari=False)

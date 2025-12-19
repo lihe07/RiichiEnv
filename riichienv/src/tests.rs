@@ -78,4 +78,55 @@ mod tests {
         assert_eq!(score.pay_tsumo_ko, 2000);
         assert_eq!(score.total, 8000);
     }
+
+
+    #[test]
+    fn test_tsuu_iisou() {
+        use crate::yaku::{calculate_yaku, YakuContext};
+        let mut hand = Hand::new();
+        // 111z, 222z, 333z, 444z, 55z
+        for &t in &[27, 28, 29, 30] {
+            hand.add(t); hand.add(t); hand.add(t);
+        }
+        hand.add(31); hand.add(31);
+
+        let res = calculate_yaku(&hand, &[], &YakuContext::default(), 31);
+        assert!(res.han >= 13);
+        assert!(res.yaku_ids.contains(&39));
+    }
+
+    #[test]
+    fn test_ryuu_iisou() {
+        use crate::yaku::{calculate_yaku, YakuContext};
+        let mut hand = Hand::new();
+        // 234s, 666s, 888s, 6s6s6s (Wait, 6s6s6s is already there)
+        // Correct 234s, 666s, 888s, Hatsuz, 6s6s (pair)
+        let tiles = [
+            19, 20, 21, // 234s
+            23, 23, 23, // 666s
+            25, 25, 25, // 888s
+            32, 32, 32, // Hatsuz
+            19, 19,     // 2s pair
+        ];
+        for &t in &tiles { hand.add(t); }
+
+        let res = calculate_yaku(&hand, &[], &YakuContext::default(), 19);
+        assert!(res.han >= 13);
+        assert!(res.yaku_ids.contains(&40));
+    }
+
+    #[test]
+    fn test_daisushii() {
+        use crate::yaku::{calculate_yaku, YakuContext};
+        let mut hand = Hand::new();
+        // EEEz, SSSz, WWWz, NNNz, 11m
+        for &t in &[27, 28, 29, 30] {
+            hand.add(t); hand.add(t); hand.add(t);
+        }
+        hand.add(0); hand.add(0);
+
+        let res = calculate_yaku(&hand, &[], &YakuContext::default(), 0);
+        assert!(res.han >= 26);
+        assert!(res.yaku_ids.contains(&50));
+    }
 }

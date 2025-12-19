@@ -111,6 +111,8 @@ pub struct Conditions {
     #[pyo3(get, set)]
     pub chankan: bool,
     #[pyo3(get, set)]
+    pub tsumo_first_turn: bool,
+    #[pyo3(get, set)]
     pub kyoutaku: u32,
     #[pyo3(get, set)]
     pub tsumi: u32,
@@ -119,7 +121,7 @@ pub struct Conditions {
 #[pymethods]
 impl Conditions {
     #[new]
-    #[pyo3(signature = (tsumo=false, riichi=false, double_riichi=false, ippatsu=false, haitei=false, houtei=false, rinshan=false, chankan=false, player_wind=0, round_wind=0, kyoutaku=0, tsumi=0))]
+    #[pyo3(signature = (tsumo=false, riichi=false, double_riichi=false, ippatsu=false, haitei=false, houtei=false, rinshan=false, chankan=false, tsumo_first_turn=false, player_wind=0, round_wind=0, kyoutaku=0, tsumi=0))]
     pub fn new(
         tsumo: bool,
         riichi: bool,
@@ -129,6 +131,7 @@ impl Conditions {
         houtei: bool,
         rinshan: bool,
         chankan: bool,
+        tsumo_first_turn: bool,
         player_wind: u8,
         round_wind: u8,
         kyoutaku: u32,
@@ -143,6 +146,7 @@ impl Conditions {
             houtei,
             rinshan,
             chankan,
+            tsumo_first_turn,
             player_wind,
             round_wind,
             kyoutaku,
