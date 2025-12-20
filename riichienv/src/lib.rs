@@ -27,5 +27,6 @@ fn _riichienv(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(agari::is_agari, m)?)?;
     m.add_function(wrap_pyfunction!(score::calculate_score, m)?)?;
     m.add_function(wrap_pyfunction!(parser::parse_hand, m)?)?;
+    m.add_function(wrap_pyfunction!(parser::parse_tile, m)?)?;
     Ok(())
 }

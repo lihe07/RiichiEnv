@@ -9,6 +9,7 @@ from ._riichienv import (
     ReplayGame,
     Kyoku,
     AgariContext,
+    parse_tile,
 )
 from .hand import AgariCalculator, Conditions, Agari
 

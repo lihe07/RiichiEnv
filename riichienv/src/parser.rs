@@ -140,6 +140,17 @@ pub fn parse_hand(text: &str) -> PyResult<(Vec<u8>, Vec<Meld>)> {
     Ok((tiles_136, melds))
 }
 
+#[pyfunction]
+pub fn parse_tile(text: &str) -> PyResult<u8> {
+    let (tiles, _) = parse_hand(text)?;
+    if tiles.is_empty() {
+        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+            "No tile found in string",
+        ));
+    }
+    Ok(tiles[0])
+}
+
 fn is_suit(c: char) -> bool {
     matches!(c, 'm' | 'p' | 's' | 'z')
 }
