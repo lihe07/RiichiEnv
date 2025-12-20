@@ -50,6 +50,9 @@ impl AgariCalculator {
                 full_hand.add(t_34);
             }
             meld.tiles = meld_tiles_34;
+            if meld.meld_type == MeldType::Chi {
+                meld.tiles.sort();
+            }
         }
 
         Self {

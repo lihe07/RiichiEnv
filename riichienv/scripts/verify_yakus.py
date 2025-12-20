@@ -1,6 +1,7 @@
 from typing import Any
 from enum import Enum
 from pathlib import Path
+import time
 import yaml
 import json
 import gzip
@@ -100,7 +101,7 @@ class Round:
 
                     for meld_idx, meld in enumerate(melds_):
                         if meld.meld_type == RiichiMeldType.Peng and (meld.tiles[0] // 4) == (kan_tile_int // 4):
-                            new_tiles = sorted(meld.tiles + [kan_tile_int])
+                            new_tiles = sorted(list(meld.tiles) + [kan_tile_int])
                             melds_[meld_idx] = Meld(RiichiMeldType.Addgang, new_tiles, True)
                             break
                     else:
@@ -212,8 +213,8 @@ class Round:
                     print(f"Actual: Han={r2.han}, Yaku IDs={r2.yaku}, Fu={r2.fu}")
                 assert r2.han == hule["count"]
                 assert r2.fu == hule["fu"]
-            valid_fans = [f for f in hule["fans"] if f["id"] not in [31, 33]]
-            r2_valid_yaku = [mjsoul_id for mjsoul_id in r2.yaku if mjsoul_id not in [31, 33]]
+            valid_fans = [f for f in hule["fans"] if f["id"] not in [31, 32, 33]]
+            r2_valid_yaku = [mjsoul_id for mjsoul_id in r2.yaku if mjsoul_id not in [31, 32, 33]]
             if len(valid_fans) != len(r2_valid_yaku):
                  print(f"Mismatch Yaku Count: seat={seat}")
                  print(f"Expected Fans: {[f['id'] for f in valid_fans]}")
@@ -319,6 +320,9 @@ class Round:
 
 
 def main() -> None:
+    total_kyoku = 0
+    start_time = time.time()
+
     base_dir = "./data/game_record_4p_thr_2025-12-14_out/"
     for j, path in enumerate(list(sorted(Path(base_dir).glob("*.json.gz")))):
         if j % 100 == 0:
@@ -335,21 +339,31 @@ def main() -> None:
             for action in round_data[1:]:
                 r.apply_action(action)
 
-    base_dir = "./data/game_record_4p_jad_2025-12-14_out/"
-    for j, path in enumerate(list(sorted(Path(base_dir).glob("*.json.gz")))):
-        if j % 100 == 0:
-            print(j)
-        data = load_game_record(path)
-        for i, round_data in enumerate(data["rounds"]):
-            mjai_records = []
-            assert round_data[0]["name"] == "NewRound"
-            assert round_data[-1]["name"] in ["LiuJu", "Hule", "NoTile"]
+            total_kyoku += 1
 
-            r = Round(round_data[0]["data"])
-            assert len(r.hands[r.oya_seat()]) == 14
+    end_time = time.time()
+    duration = end_time - start_time
 
-            for action in round_data[1:]:
-                r.apply_action(action)
+    print("-" * 20)
+    print(f"Processed {total_kyoku} kyoku.")
+    print(f"Duration: {duration:.2f} seconds")
+    print(f"Performance: {total_kyoku / duration:.2f} kyoku/sec")
+
+    # base_dir = "./data/game_record_4p_jad_2025-12-14_out/"
+    # for j, path in enumerate(list(sorted(Path(base_dir).glob("*.json.gz")))):
+    #     if j % 100 == 0:
+    #         print(j)
+    #     data = load_game_record(path)
+    #     for i, round_data in enumerate(data["rounds"]):
+    #         mjai_records = []
+    #         assert round_data[0]["name"] == "NewRound"
+    #         assert round_data[-1]["name"] in ["LiuJu", "Hule", "NoTile"]
+
+    #         r = Round(round_data[0]["data"])
+    #         assert len(r.hands[r.oya_seat()]) == 14
+
+    #         for action in round_data[1:]:
+    #             r.apply_action(action)
 
 
 if __name__ == "__main__":

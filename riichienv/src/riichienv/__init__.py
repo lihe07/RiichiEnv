@@ -6,5 +6,8 @@ from ._riichienv import (
     is_agari,
     calculate_score,
     parse_hand,
+    ReplayGame,
+    Kyoku,
+    AgariContext,
 )
 from .hand import AgariCalculator, Conditions, Agari

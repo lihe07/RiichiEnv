@@ -1,0 +1,756 @@
+use pyo3::prelude::*;
+use pyo3::exceptions::PyValueError;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::fs::File;
+use std::io::BufReader;
+use flate2::read::GzDecoder;
+
+use crate::types::{Conditions, Hand, Meld, MeldType, Agari};
+use crate::agari_calculator::{AgariCalculator};
+
+use std::sync::Arc;
+
+#[derive(Clone, Debug)]
+pub enum Action {
+    DiscardTile { seat: usize, tile: u8, is_liqi: bool, is_wliqi: bool, doras: Option<Vec<u8>> },
+    DealTile { seat: usize, tile: u8, doras: Option<Vec<u8>>, left_tile_count: Option<u8> },
+    ChiPengGang { seat: usize, meld_type: MeldType, tiles: Vec<u8>, froms: Vec<usize> },
+    AnGangAddGang { seat: usize, meld_type: MeldType, tiles: Vec<u8>, tile_raw_id: u8, doras: Option<Vec<u8>> },
+    Dora { dora_marker: u8 },
+    Hule { hules: Vec<HuleData> },
+    NoTile,
+    LiuJu,
+    Other(String),
+}
+
+#[derive(Clone, Debug)]
+pub struct HuleData {
+    pub seat: usize,
+    pub hu_tile: u8,
+    pub zimo: bool,
+    pub count: u32,
+    pub fu: u32,
+    pub fans: Vec<u32>,
+    pub li_doras: Option<Vec<u8>>,
+    pub yiman: bool,
+    pub point_rong: u32,
+    pub point_zimo_qin: u32,
+    pub point_zimo_xian: u32,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(tag = "name", content = "data")]
+pub enum MjaiAction {
+    #[serde(rename = "NewRound")]
+    NewRound {
+        scores: Vec<i32>,
+        doras: Option<Vec<String>>,
+        dora_indicators: Option<Vec<String>>,
+        dora_marker: Option<String>,
+        tiles0: Vec<String>,
+        tiles1: Vec<String>,
+        tiles2: Vec<String>,
+        tiles3: Vec<String>,
+        chang: u8,
+        ju: u8,
+        ben: Option<u8>,
+        honba: Option<u8>,
+        liqibang: u8,
+        left_tile_count: Option<u8>,
+        ura_doras: Option<Vec<String>>,
+    },
+    #[serde(rename = "DiscardTile")]
+    DiscardTile {
+        seat: usize,
+        tile: String,
+        #[serde(default)]
+        is_liqi: bool,
+        #[serde(default)]
+        is_wliqi: bool,
+        #[serde(default)]
+        doras: Vec<String>,
+    },
+    #[serde(rename = "DealTile")]
+    DealTile {
+        seat: usize,
+        tile: String,
+        #[serde(default)]
+        doras: Vec<String>,
+        dora_marker: Option<String>,
+        left_tile_count: Option<u8>,
+    },
+    #[serde(rename = "ChiPengGang")]
+    ChiPengGang {
+        seat: usize,
+        #[serde(rename = "type")]
+        meld_type: u64,
+        tiles: Vec<String>,
+        froms: Vec<usize>,
+    },
+    #[serde(rename = "AnGangAddGang")]
+    AnGangAddGang {
+        seat: usize,
+        #[serde(rename = "type")]
+        meld_type: u64,
+        tiles: String,
+    },
+    #[serde(rename = "Hule")]
+    Hule {
+        hules: Vec<HuleDataRaw>,
+    },
+    #[serde(rename = "dora")]
+    Dora {
+        dora_marker: String,
+    },
+    #[serde(rename = "NoTile")]
+    NoTile {},
+    #[serde(rename = "LiuJu")]
+    LiuJu {},
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct HuleDataRaw {
+    pub seat: usize,
+    pub hu_tile: String,
+    pub zimo: bool,
+    pub count: u32,
+    pub fu: u32,
+    pub fans: Vec<FanRaw>,
+    pub hand: Vec<String>,
+    pub ura_dora_indicators: Option<Vec<String>>,
+    pub li_doras: Option<Vec<String>>,
+    pub yiman: bool,
+    pub point_rong: u32,
+    pub point_zimo_qin: u32,
+    pub point_zimo_xian: u32,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct FanRaw {
+    pub id: u32,
+}
+
+pub struct TypedRound {
+    pub actions: Vec<Action>,
+    pub initial_hands: Vec<Vec<u8>>,
+    pub initial_doras: Vec<u8>,
+    pub chang: u8,
+    pub ju: u8,
+    pub ben: u8,
+    pub liqibang: u8,
+    pub left_tile_count: u8,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct MjaiLog {
+    pub rounds: Vec<Vec<MjaiAction>>,
+}
+
+#[pyclass]
+pub struct ReplayGame {
+    rounds: Vec<Kyoku>,
+}
+
+#[pymethods]
+impl ReplayGame {
+    #[staticmethod]
+    fn from_json(path: String) -> PyResult<Self> {
+        let file = File::open(&path).map_err(|e| PyValueError::new_err(format!("Failed to open file: {}", e)))?;
+        let reader = BufReader::with_capacity(65536, file);
+        let mut decoder = GzDecoder::new(reader);
+        let mut buffer = Vec::with_capacity(128 * 1024);
+        use std::io::Read;
+        decoder.read_to_end(&mut buffer).map_err(|e| PyValueError::new_err(format!("Failed to decompress: {}", e)))?;
+        
+        let log: MjaiLog = serde_json::from_slice(&buffer).map_err(|e| PyValueError::new_err(format!("Failed to parse JSON: {}", e)))?;
+        
+        let mut rounds = Vec::with_capacity(log.rounds.len());
+        for r_mjai in log.rounds {
+            rounds.push(Kyoku::from_mjai_actions(r_mjai));
+        }
+        
+        Ok(ReplayGame { rounds })
+    }
+
+    fn num_rounds(&self) -> usize {
+        self.rounds.len()
+    }
+
+    fn take_kyokus(slf: Py<Self>, py: Python<'_>) -> PyResult<KyokuIterator> {
+        let logs_len = slf.borrow(py).rounds.len();
+        Ok(KyokuIterator { game: slf, index: 0, len: logs_len })
+    }
+
+    fn verify(&self) -> (usize, usize) {
+        let mut total_agari = 0;
+        let mut total_mismatches = 0;
+        
+        for kyoku in &self.rounds {
+            let mut iter = AgariContextIterator::new(kyoku.clone());
+            
+            while let Some(ctx) = iter.do_next() {
+                total_agari += 1;
+                
+                let sim_han = ctx.actual.han;
+                let sim_fu = ctx.actual.fu;
+                let sim_yaku = ctx.actual.yaku.clone();
+
+                let exp_han = ctx.expected_han;
+                let exp_fu = ctx.expected_fu;
+                let exp_yaku = ctx.expected_yaku.clone();
+                
+                // IGNORED: 31 (Dora), 32 (Aka), 33 (Ura)
+                let IGNORED = [31, 32, 33];
+                let YAKUMAN_IDS: Vec<u32> = (35..51).collect();
+
+                let mut sim_filtered: Vec<u32> = sim_yaku.iter().filter(|y| !IGNORED.contains(y)).cloned().collect();
+                let mut exp_filtered: Vec<u32> = exp_yaku.iter().filter(|y| !IGNORED.contains(y)).cloned().collect();
+                
+                let mut normalized_exp_han = exp_han;
+                let is_yakuman = exp_yaku.iter().any(|y| YAKUMAN_IDS.contains(y));
+                if is_yakuman && exp_han < 13 {
+                    normalized_exp_han = exp_han * 13;
+                }
+
+                let mut mismatch = false;
+                sim_filtered.sort();
+                exp_filtered.sort();
+
+                if sim_filtered != exp_filtered {
+                    mismatch = true;
+                } else {
+                    let sim_ignored_han = sim_yaku.iter().filter(|y| IGNORED.contains(y)).count() as u32;
+                    let exp_ignored_han = exp_yaku.iter().filter(|y| IGNORED.contains(y)).count() as u32;
+                    let expected_sim_han = normalized_exp_han as i32 - exp_ignored_han as i32 + sim_ignored_han as i32;
+                    
+                    if normalized_exp_han < 13 && sim_han as i32 != expected_sim_han {
+                        if sim_han != normalized_exp_han { mismatch = true; }
+                    } else if (sim_han >= 13) != (normalized_exp_han >= 13) {
+                        mismatch = true;
+                    }
+                    
+                    if !mismatch && normalized_exp_han < 13 && sim_fu != exp_fu {
+                        mismatch = true;
+                    }
+                }
+                
+                if mismatch {
+                    total_mismatches += 1;
+                    println!("Mismatch: seat={}, han=(sim={}, exp={}), fu=(sim={}, exp={})", ctx.seat, sim_han, exp_han, sim_fu, exp_fu);
+                    println!("  Expected Yaku: {:?}", exp_yaku);
+                    println!("  Actual Yaku: {:?}", sim_yaku);
+                    println!("  Conditions: {:?}", ctx.conditions);
+                }
+            }
+        }
+        (total_agari, total_mismatches)
+    }
+}
+
+#[pyclass]
+pub struct KyokuIterator {
+    game: Py<ReplayGame>,
+    index: usize,
+    len: usize,
+}
+
+#[pymethods]
+impl KyokuIterator {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> Option<Kyoku> {
+        if slf.index >= slf.len {
+            return None;
+        }
+
+        let kyoku = {
+            let game = slf.game.borrow(slf.py());
+            game.rounds[slf.index].clone()
+        };
+        slf.index += 1;
+
+        Some(kyoku)
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+pub struct Kyoku {
+    scores: Vec<i32>,
+    doras: Vec<u8>,
+    ura_doras: Vec<u8>,
+    hands: Vec<Vec<u8>>,
+    chang: u8,
+    ju: u8,
+    ben: u8,
+    liqibang: u8,
+    left_tile_count: u8,
+    pub actions: Arc<[Action]>,
+}
+
+#[pymethods]
+impl Kyoku {
+    fn take_agari_contexts(&self) -> PyResult<AgariContextIterator> {
+        Ok(AgariContextIterator::new(self.clone()))
+    }
+}
+
+impl Kyoku {
+    pub fn from_mjai_actions(mjai_actions: Vec<MjaiAction>) -> Self {
+        let mut scores = Vec::new();
+        let mut doras = Vec::new();
+        let mut hands = vec![Vec::new(); 4];
+        let mut chang = 0;
+        let mut ju = 0;
+        let mut ben = 0;
+        let mut liqibang = 0;
+        let mut left_tile_count = 70;
+        let mut ura_doras = Vec::new();
+
+        if let MjaiAction::NewRound { scores: s, doras: d_opt, dora_indicators, dora_marker, tiles0, tiles1, tiles2, tiles3, chang: c, ju: j, ben: b, honba, liqibang: l, left_tile_count: lc, ura_doras: ud } = &mjai_actions[0] {
+            scores = s.clone();
+            if let Some(da) = dora_indicators.as_ref().or(d_opt.as_ref()) {
+                for v in da { doras.push(TileConverter::parse_tile_136(v)); }
+            } else if let Some(dm) = dora_marker {
+                doras.push(TileConverter::parse_tile_136(dm));
+            }
+            hands = vec![
+                tiles0.iter().map(|v| TileConverter::parse_tile_136(v)).collect(),
+                tiles1.iter().map(|v| TileConverter::parse_tile_136(v)).collect(),
+                tiles2.iter().map(|v| TileConverter::parse_tile_136(v)).collect(),
+                tiles3.iter().map(|v| TileConverter::parse_tile_136(v)).collect(),
+            ];
+            chang = *c;
+            ju = *j;
+            ben = b.or(*honba).unwrap_or(0);
+            liqibang = *l;
+            left_tile_count = lc.unwrap_or(70);
+            if let Some(uda) = ud {
+                ura_doras = uda.iter().map(|v| TileConverter::parse_tile_136(v)).collect();
+            }
+        }
+        
+        let mut actions = Vec::with_capacity(mjai_actions.len());
+        for ma in mjai_actions {
+            actions.push(Self::parse_mjai_action(ma));
+        }
+
+        Kyoku {
+            scores, doras, ura_doras, hands, chang, ju, ben, liqibang, left_tile_count,
+            actions: Arc::from(actions),
+        }
+    }
+
+    fn parse_mjai_action(ma: MjaiAction) -> Action {
+        match ma {
+            MjaiAction::DiscardTile { seat, tile, is_liqi, is_wliqi, doras } => {
+                Action::DiscardTile {
+                    seat,
+                    tile: TileConverter::parse_tile_136(&tile),
+                    is_liqi,
+                    is_wliqi,
+                    doras: if doras.is_empty() { None } else { Some(doras.iter().map(|v| TileConverter::parse_tile_136(v)).collect()) },
+                }
+            }
+            MjaiAction::DealTile { seat, tile, doras, dora_marker, left_tile_count } => {
+                let mut d_res = if doras.is_empty() { None } else { Some(doras.iter().map(|v| TileConverter::parse_tile_136(v)).collect()) };
+                if d_res.is_none() {
+                    if let Some(dm) = dora_marker {
+                        d_res = Some(vec![TileConverter::parse_tile_136(&dm)]);
+                    }
+                }
+                Action::DealTile {
+                    seat,
+                    tile: TileConverter::parse_tile_136(&tile),
+                    doras: d_res,
+                    left_tile_count,
+                }
+            }
+            MjaiAction::ChiPengGang { seat, meld_type, tiles, froms } => {
+                let m_type = match meld_type {
+                    0 => MeldType::Chi, 1 => MeldType::Peng, 2 => MeldType::Gang, 3 => MeldType::Angang, _ => MeldType::Chi,
+                };
+                Action::ChiPengGang {
+                    seat,
+                    meld_type: m_type,
+                    tiles: tiles.iter().map(|v| TileConverter::parse_tile_136(v)).collect(),
+                    froms,
+                }
+            }
+            MjaiAction::AnGangAddGang { seat, meld_type, tiles } => {
+                let m_type = if meld_type == 3 { MeldType::Angang } else { MeldType::Addgang };
+                let tile_raw_id = TileConverter::parse_tile_34(&tiles).0;
+                Action::AnGangAddGang {
+                    seat,
+                    meld_type: m_type,
+                    tiles: vec![TileConverter::parse_tile_136(&tiles)],
+                    tile_raw_id,
+                    doras: None, // Will be updated by Dora action or DealTile
+                }
+            }
+            MjaiAction::Hule { hules } => {
+                let hules_typed = hules.into_iter().map(|h| HuleData {
+                    seat: h.seat,
+                    hu_tile: TileConverter::parse_tile_136(&h.hu_tile),
+                    zimo: h.zimo,
+                    count: h.count,
+                    fu: h.fu,
+                    fans: h.fans.iter().map(|f| f.id).collect(),
+                    li_doras: h.ura_dora_indicators.or(h.li_doras).map(|a| a.iter().map(|v| TileConverter::parse_tile_136(v)).collect()),
+                    yiman: h.yiman,
+                    point_rong: h.point_rong,
+                    point_zimo_qin: h.point_zimo_qin,
+                    point_zimo_xian: h.point_zimo_xian,
+                }).collect();
+                Action::Hule { hules: hules_typed }
+            }
+            MjaiAction::Dora { dora_marker } => Action::Dora { dora_marker: TileConverter::parse_tile_136(&dora_marker) },
+            MjaiAction::NoTile {} => Action::NoTile,
+            MjaiAction::LiuJu {} => Action::LiuJu,
+            _ => Action::Other("Other".to_string()),
+        }
+    }
+}
+
+#[pyclass]
+pub struct AgariContextIterator {
+    kyoku: Kyoku,
+    action_index: usize,
+    pending_agari: Vec<AgariContext>,
+    melds: Vec<Vec<Meld>>,
+    current_hands: Vec<Vec<u8>>,
+    liqi: Vec<bool>,
+    wliqi: Vec<bool>,
+    ippatsu: Vec<bool>,
+    rinshan: Vec<bool>,
+    is_first_turn: Vec<bool>,
+    last_action_was_kakan: bool,
+    kakan_tile: Option<u8>,
+    current_doras: Vec<u8>,
+    current_liqibang: u8,
+    current_left_tile_count: u8,
+}
+
+#[pymethods]
+impl AgariContextIterator {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> Option<AgariContext> {
+        slf.do_next()
+    }
+}
+
+impl AgariContextIterator {
+    fn new(kyoku: Kyoku) -> Self {
+        AgariContextIterator {
+            kyoku: kyoku.clone(),
+            action_index: 0,
+            pending_agari: Vec::new(),
+            melds: vec![Vec::new(); 4],
+            current_hands: kyoku.hands.clone(),
+            liqi: vec![false; 4],
+            wliqi: vec![false; 4],
+            ippatsu: vec![false; 4],
+            rinshan: vec![false; 4],
+            is_first_turn: vec![true; 4],
+            last_action_was_kakan: false,
+            kakan_tile: None,
+            current_doras: kyoku.doras.clone(),
+            current_liqibang: kyoku.liqibang,
+            current_left_tile_count: kyoku.left_tile_count,
+        }
+    }
+
+    fn do_next(&mut self) -> Option<AgariContext> {
+        if !self.pending_agari.is_empty() {
+            return Some(self.pending_agari.remove(0));
+        }
+
+        while self.action_index < self.kyoku.actions.len() {
+            let action = &self.kyoku.actions[self.action_index];
+            self.action_index += 1;
+
+            if !matches!(action, Action::Hule { .. }) {
+                self.rinshan = vec![false; 4];
+            }
+
+            match action {
+                Action::DiscardTile { seat, tile, is_liqi, is_wliqi, doras } => {
+                    if self.last_action_was_kakan {
+                        self.ippatsu = vec![false; 4];
+                        self.is_first_turn = vec![false; 4];
+                        self.last_action_was_kakan = false;
+                        self.kakan_tile = None;
+                    }
+
+                    if *is_wliqi {
+                        self.wliqi[*seat] = true;
+                        self.ippatsu[*seat] = true;
+                    }
+                    if *is_liqi {
+                        self.liqi[*seat] = true;
+                        self.ippatsu[*seat] = true;
+                    }
+                    if !*is_liqi {
+                        self.ippatsu[*seat] = false;
+                    }
+                    self.is_first_turn[*seat] = false;
+
+                    TileConverter::match_and_remove_u8(&mut self.current_hands[*seat], *tile);
+                    if let Some(d) = doras {
+                        self.current_doras = d.clone();
+                    }
+                }
+                Action::DealTile { seat, tile, doras, left_tile_count } => {
+                    if self.last_action_was_kakan {
+                        self.ippatsu = vec![false; 4];
+                        self.is_first_turn = vec![false; 4];
+                        self.last_action_was_kakan = false;
+                        self.kakan_tile = None;
+                    }
+                    self.current_hands[*seat].push(*tile);
+                    if let Some(c) = left_tile_count {
+                        self.current_left_tile_count = *c;
+                    } else if self.current_left_tile_count > 0 {
+                        self.current_left_tile_count -= 1;
+                    }
+                    if let Some(d) = doras {
+                        self.current_doras = d.clone();
+                        self.rinshan[*seat] = true;
+                    }
+                }
+                Action::ChiPengGang { seat, meld_type, tiles, froms } => {
+                    self.rinshan = vec![false; 4];
+                    self.ippatsu = vec![false; 4];
+                    self.is_first_turn = vec![false; 4];
+                    self.last_action_was_kakan = false;
+                    self.kakan_tile = None;
+
+                    for (i, t) in tiles.iter().enumerate() {
+                        if i < froms.len() && froms[i] == *seat {
+                            TileConverter::match_and_remove_u8(&mut self.current_hands[*seat], *t);
+                        }
+                    }
+                    self.melds[*seat].push(Meld { meld_type: *meld_type, tiles: tiles.clone(), opened: true });
+                    if *meld_type == MeldType::Gang {
+                        self.rinshan[*seat] = true;
+                    }
+                }
+                Action::Dora { dora_marker } => {
+                    self.current_doras.push(*dora_marker);
+                }
+                Action::AnGangAddGang { seat, meld_type, tiles, tile_raw_id, doras } => {
+                    self.rinshan = vec![false; 4];
+                    if let Some(d) = doras {
+                        self.current_doras = d.clone();
+                    }
+                    if *meld_type == MeldType::Angang {
+                        self.ippatsu = vec![false; 4];
+                        self.is_first_turn = vec![false; 4];
+                        self.last_action_was_kakan = false;
+                        self.kakan_tile = None;
+
+                        let target_34 = *tile_raw_id;
+                        for _ in 0..4 {
+                            if let Some(pos) = self.current_hands[*seat].iter().position(|x| *x / 4 == target_34) {
+                                self.current_hands[*seat].remove(pos);
+                            }
+                        }
+
+                        let mut m_tiles = vec![target_34 * 4, target_34 * 4 + 1, target_34 * 4 + 2, target_34 * 4 + 3];
+                        // Correct for red tiles
+                        if target_34 == 4 { m_tiles = vec![16, 17, 18, 19]; }
+                        else if target_34 == 13 { m_tiles = vec![52, 53, 54, 55]; }
+                        else if target_34 == 22 { m_tiles = vec![88, 89, 90, 91]; }
+                        
+                        self.melds[*seat].push(Meld { meld_type: *meld_type, tiles: m_tiles, opened: false });
+                        self.rinshan[*seat] = true;
+                    } else {
+                        self.last_action_was_kakan = true;
+                        self.kakan_tile = Some(tiles[0]);
+                        self.rinshan[*seat] = true;
+                        let mut upgraded = false;
+                        for m in self.melds[*seat].iter_mut() {
+                            if m.meld_type == MeldType::Peng && (m.tiles[0] / 4 == tiles[0] / 4) {
+                                m.meld_type = MeldType::Addgang;
+                                m.tiles.push(tiles[0]);
+                                upgraded = true;
+                                break;
+                            }
+                        }
+                        if !upgraded {
+                            self.melds[*seat].push(Meld { meld_type: *meld_type, tiles: tiles.clone(), opened: true });
+                        }
+                        TileConverter::match_and_remove_u8(&mut self.current_hands[*seat], tiles[0]);
+                    }
+                }
+                Action::Hule { hules } => {
+                    for hule_data in hules {
+                        let seat = hule_data.seat;
+                        let win_tile = hule_data.hu_tile;
+                        let is_zimo = hule_data.zimo;
+
+                        let mut is_chankan = false;
+                        if !is_zimo && self.last_action_was_kakan {
+                            if let Some(k) = self.kakan_tile {
+                                if k / 4 == win_tile / 4 { is_chankan = true; }
+                            }
+                        }
+
+                        let mut hand_136 = self.current_hands[seat].clone();
+                        let melds_136 = self.melds[seat].clone();
+                        
+                        let conditions = Conditions {
+                            tsumo: is_zimo,
+                            riichi: self.liqi[seat],
+                            double_riichi: self.wliqi[seat],
+                            ippatsu: self.ippatsu[seat],
+                            haitei: (self.current_left_tile_count == 0) && is_zimo && !self.rinshan[seat],
+                            houtei: (self.current_left_tile_count == 0) && !is_zimo && !self.rinshan[seat],
+                            rinshan: self.rinshan[seat],
+                            chankan: is_chankan,
+                            tsumo_first_turn: self.is_first_turn[seat],
+                            kyoutaku: self.kyoku.liqibang as u32,
+                            tsumi: self.kyoku.ben as u32,
+                            player_wind: ((seat as i32 - self.kyoku.ju as i32 + 4) % 4) as u8,
+                            round_wind: self.kyoku.chang,
+                        };
+
+                        if !is_zimo { hand_136.push(win_tile); }
+
+                        let dora_indicators = self.current_doras.clone();
+                        let ura_indicators = if self.liqi[seat] {
+                             if let Some(ref li) = hule_data.li_doras {
+                                 li.clone()
+                             } else {
+                                 self.kyoku.ura_doras.clone()
+                             }
+                        } else {
+                             vec![]
+                        };
+
+                        let actual_result = {
+                            let calc = AgariCalculator::new(hand_136.clone(), melds_136.clone());
+                            calc.calc(win_tile, dora_indicators.clone(), ura_indicators.clone(), conditions.clone())
+                        };
+
+                        self.pending_agari.push(AgariContext {
+                            seat: seat as u8,
+                            tiles: hand_136,
+                            melds: melds_136,
+                            agari_tile: win_tile,
+                            dora_indicators,
+                            ura_indicators,
+                            conditions,
+                            expected_yaku: hule_data.fans.clone(),
+                            expected_han: hule_data.count,
+                            expected_fu: hule_data.fu,
+                            actual: actual_result,
+                        });
+                    }
+                    if !self.pending_agari.is_empty() {
+                        return Some(self.pending_agari.remove(0));
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+}
+
+#[pyclass]
+pub struct AgariContext {
+    #[pyo3(get)]
+    pub seat: u8,
+    #[pyo3(get)]
+    pub tiles: Vec<u8>,
+    #[pyo3(get)]
+    pub melds: Vec<Meld>,
+    #[pyo3(get)]
+    pub agari_tile: u8,
+    #[pyo3(get)]
+    pub dora_indicators: Vec<u8>,
+    #[pyo3(get)]
+    pub ura_indicators: Vec<u8>,
+    #[pyo3(get)]
+    pub conditions: Conditions,
+    #[pyo3(get)]
+    pub expected_yaku: Vec<u32>,
+    #[pyo3(get)]
+    pub expected_han: u32,
+    #[pyo3(get)]
+    pub expected_fu: u32,
+    #[pyo3(get)]
+    pub actual: Agari,
+}
+
+struct TileConverter {
+}
+
+impl TileConverter {
+    fn new() -> Self {
+        TileConverter { }
+    }
+
+    pub fn parse_tile(t: &str) -> (u8, bool) {
+        if t.is_empty() { return (0, false); }
+        let (num_str, suit) = t.split_at(1);
+        let num: u8 = num_str.parse().unwrap_or(0);
+        let is_aka = num == 0;
+        let num = if is_aka { 5 } else { num };
+        
+        let id_34 = match suit {
+            "m" => num - 1,
+            "p" => 9 + num - 1,
+            "s" => 18 + num - 1,
+            "z" => 27 + num - 1,
+            _ => 0,
+        };
+        
+        (id_34 as u8, is_aka)
+    }
+
+    pub fn parse_tile_34(t: &str) -> (u8, bool) {
+        Self::parse_tile(t)
+    }
+
+    pub fn parse_tile_136(t: &str) -> u8 {
+        let (id_34, is_aka) = Self::parse_tile(t);
+        if is_aka {
+            match id_34 {
+                4 => 16,
+                13 => 52,
+                22 => 88,
+                _ => id_34 * 4,
+            }
+        } else {
+            if id_34 == 4 || id_34 == 13 || id_34 == 22 {
+                id_34 * 4 + 1
+            } else {
+                id_34 * 4
+            }
+        }
+    }
+
+    fn match_and_remove_u8(hand: &mut Vec<u8>, target: u8) -> bool {
+        if let Some(pos) = hand.iter().position(|x| *x == target) {
+            hand.remove(pos);
+            return true;
+        }
+        // Try other 136-ids of the same 34-tile if not found (for robustness)
+        let target_34 = target / 4;
+        if let Some(pos) = hand.iter().position(|x| *x / 4 == target_34) {
+             hand.remove(pos);
+             return true;
+        }
+        false
+    }
+}

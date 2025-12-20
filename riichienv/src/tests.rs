@@ -14,7 +14,7 @@ mod tests {
             9, 10, 11, // 123p (mapped to 9,10,11)
             18, 18 // 1s pair (mapped to 18)
         ];
-        let hand = Hand::from_tiles(&tiles);
+        let hand = Hand::new(Some(tiles.to_vec()));
         assert!(is_agari(&hand), "Should be agari");
     }
 
@@ -24,7 +24,7 @@ mod tests {
          // m: 0-8, p: 9-17, s: 18-26
          // 123p -> 9, 10, 11
          // 11s -> 18, 18
-         let mut hand = Hand::new();
+         let mut hand = Hand::new(None);
          // 123m
          hand.add(0); hand.add(1); hand.add(2);
          // 456m
@@ -41,7 +41,7 @@ mod tests {
 
     #[test]
     fn test_chiitoitsu() {
-        let mut hand = Hand::new();
+        let mut hand = Hand::new(None);
         let pairs = [0, 2, 4, 6, 8, 10, 12];
         for &t in &pairs {
             hand.add(t);
@@ -53,7 +53,7 @@ mod tests {
 
     #[test]
     fn test_kokushi() {
-        let mut hand = Hand::new();
+        let mut hand = Hand::new(None);
         // 1m,9m, 1p,9p, 1s,9s, 1z-7z
         let terminals = [0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33];
         for &t in &terminals {
@@ -83,7 +83,7 @@ mod tests {
     #[test]
     fn test_tsuu_iisou() {
         use crate::yaku::{calculate_yaku, YakuContext};
-        let mut hand = Hand::new();
+        let mut hand = Hand::new(None);
         // 111z, 222z, 333z, 444z, 55z
         for &t in &[27, 28, 29, 30] {
             hand.add(t); hand.add(t); hand.add(t);
@@ -98,7 +98,7 @@ mod tests {
     #[test]
     fn test_ryuu_iisou() {
         use crate::yaku::{calculate_yaku, YakuContext};
-        let mut hand = Hand::new();
+        let mut hand = Hand::new(None);
         // 234s, 666s, 888s, 6s6s6s (Wait, 6s6s6s is already there)
         // Correct 234s, 666s, 888s, Hatsuz, 6s6s (pair)
         let tiles = [
@@ -118,7 +118,7 @@ mod tests {
     #[test]
     fn test_daisushii() {
         use crate::yaku::{calculate_yaku, YakuContext};
-        let mut hand = Hand::new();
+        let mut hand = Hand::new(None);
         // EEEz, SSSz, WWWz, NNNz, 11m
         for &t in &[27, 28, 29, 30] {
             hand.add(t); hand.add(t); hand.add(t);

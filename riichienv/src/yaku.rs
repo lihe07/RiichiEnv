@@ -143,7 +143,8 @@ pub fn calculate_yaku(hand: &Hand, melds: &[Meld], ctx: &YakuContext, win_tile: 
                             else { 10 } // Jikaze iteration
                         }
                     };
-                    for _ in 0..count { res.yaku_ids.push(id); res.yaku_names.push("Yakuhai".to_string()); }
+                    res.yaku_ids.push(id);
+                    res.yaku_names.push("Yakuhai".to_string());
                 }
             }
 

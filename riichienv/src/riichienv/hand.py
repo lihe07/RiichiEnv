@@ -181,6 +181,7 @@ class AgariCalculator:
         if current_tiles_count != expected_count:
              raise ValueError(f"Hand must have {expected_count} tiles (got {current_tiles_count})")
              
+        tiles = list(tiles)
         tiles.sort()
         return AgariCalculator(tiles, melds)
 
@@ -232,6 +233,7 @@ class AgariCalculator:
              raise ValueError("No standing tiles to check for win tile")
              
         win_tile = tiles[-1]
+        tiles = list(tiles)
         tiles.sort() # sort all tiles including win tile
         
         calc = AgariCalculator(tiles, melds)
@@ -239,11 +241,13 @@ class AgariCalculator:
         dora_inds = []
         if dora_indicators:
              dora_inds, _ = rust_core.parse_hand(dora_indicators)
+             dora_inds = list(dora_inds)
              dora_inds.sort()
              
         ura_inds = []
         if ura_indicators:
              ura_inds, _ = rust_core.parse_hand(ura_indicators)
+             ura_inds = list(ura_inds)
              ura_inds.sort()
              
         return calc.calc(win_tile, dora_inds, conditions, ura_inds)
