@@ -130,15 +130,6 @@ class AgariCalculator:
     def __init__(self, tiles: list[int], melds: list[Meld] = None) -> None:
         self.tiles_136 = tiles
         self.melds = melds or []
-
-        # Ensure standing tiles do not include tiles from melds
-        if self.melds:
-            self.tiles_136 = list(self.tiles_136) # Copy to avoid side effects and allow mutation
-            for m in self.melds:
-                for mt in m.tiles:
-                    if mt in self.tiles_136:
-                        self.tiles_136.remove(mt)
-        
         rust_melds = []
         for m in self.melds:
             if isinstance(m, rust_core.Meld):
