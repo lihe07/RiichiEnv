@@ -876,28 +876,82 @@ impl AgariContextIterator {
 
 #[pyclass]
 pub struct AgariContext {
-    #[pyo3(get)]
     pub seat: u8,
-    #[pyo3(get)]
     pub tiles: Vec<u8>,
-    #[pyo3(get)]
     pub melds: Vec<Meld>,
-    #[pyo3(get)]
     pub agari_tile: u8,
-    #[pyo3(get)]
     pub dora_indicators: Vec<u8>,
-    #[pyo3(get)]
     pub ura_indicators: Vec<u8>,
-    #[pyo3(get)]
     pub conditions: Conditions,
-    #[pyo3(get)]
     pub expected_yaku: Vec<u32>,
-    #[pyo3(get)]
     pub expected_han: u32,
-    #[pyo3(get)]
     pub expected_fu: u32,
-    #[pyo3(get)]
     pub actual: Agari,
+}
+
+#[pymethods]
+impl AgariContext {
+    #[getter]
+    pub fn seat(&self) -> u8 {
+        self.seat
+    }
+    #[getter]
+    pub fn tiles(&self) -> Vec<u32> {
+        self.tiles.iter().map(|&t| t as u32).collect()
+    }
+    #[getter]
+    pub fn melds(&self) -> Vec<Meld> {
+        self.melds.clone()
+    }
+    #[getter]
+    pub fn agari_tile(&self) -> u32 {
+        self.agari_tile as u32
+    }
+    #[getter]
+    pub fn dora_indicators(&self) -> Vec<u32> {
+        self.dora_indicators.iter().map(|&t| t as u32).collect()
+    }
+    #[getter]
+    pub fn ura_indicators(&self) -> Vec<u32> {
+        self.ura_indicators.iter().map(|&t| t as u32).collect()
+    }
+    #[getter]
+    pub fn conditions(&self) -> Conditions {
+        self.conditions.clone()
+    }
+    #[getter]
+    pub fn expected_yaku(&self) -> Vec<u32> {
+        self.expected_yaku.clone()
+    }
+    #[getter]
+    pub fn expected_han(&self) -> u32 {
+        self.expected_han
+    }
+    #[getter]
+    pub fn expected_fu(&self) -> u32 {
+        self.expected_fu
+    }
+    #[getter]
+    pub fn actual(&self) -> Agari {
+        self.actual.clone()
+    }
+
+    /// Creates an AgariCalculator initialized with the hand and melds from this context.
+    pub fn create_calculator(&self) -> AgariCalculator {
+        AgariCalculator::new(self.tiles.clone(), self.melds.clone())
+    }
+
+    /// Calculates the agari result using the provided calculator and conditions.
+    #[pyo3(signature = (calculator, conditions=None))]
+    pub fn calculate(&self, calculator: &AgariCalculator, conditions: Option<Conditions>) -> Agari {
+        let cond = conditions.unwrap_or_else(|| self.conditions.clone());
+        calculator.calc(
+            self.agari_tile,
+            self.dora_indicators.clone(),
+            self.ura_indicators.clone(),
+            cond,
+        )
+    }
 }
 
 struct TileConverter {}
