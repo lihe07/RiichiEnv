@@ -44,7 +44,12 @@ pub fn find_divisions(hand: &Hand) -> Vec<Division> {
     divisions
 }
 
-fn decompose_all(hand: &mut Hand, start_idx: usize, current_body: &mut Vec<Mentsu>, results: &mut Vec<Vec<Mentsu>>) {
+fn decompose_all(
+    hand: &mut Hand,
+    start_idx: usize,
+    current_body: &mut Vec<Mentsu>,
+    results: &mut Vec<Vec<Mentsu>>,
+) {
     let mut i = start_idx;
     while i < TILE_MAX && hand.counts[i] == 0 {
         i += 1;
@@ -73,27 +78,24 @@ fn decompose_all(hand: &mut Hand, start_idx: usize, current_body: &mut Vec<Ments
             _ => false,
         };
 
-        if is_valid_seq_start && hand.counts[i+1] > 0 && hand.counts[i+2] > 0 {
+        if is_valid_seq_start && hand.counts[i + 1] > 0 && hand.counts[i + 2] > 0 {
             hand.counts[i] -= 1;
-            hand.counts[i+1] -= 1;
-            hand.counts[i+2] -= 1;
+            hand.counts[i + 1] -= 1;
+            hand.counts[i + 2] -= 1;
             current_body.push(Mentsu::Shuntsu(i as u8));
             decompose_all(hand, i, current_body, results);
             current_body.pop();
             hand.counts[i] += 1;
-            hand.counts[i+1] += 1;
-            hand.counts[i+2] += 1;
+            hand.counts[i + 1] += 1;
+            hand.counts[i + 2] += 1;
         }
     }
 }
 
 pub fn is_kokushi(hand: &Hand) -> bool {
-    let kokushi_indices = [
-        0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33
-    ];
+    let kokushi_indices = [0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33];
     let mut pair_found = false;
-    let mut count_total = 0;
-    
+
     for &idx in &kokushi_indices {
         let c = hand.counts[idx];
         if c == 0 {
@@ -107,9 +109,8 @@ pub fn is_kokushi(hand: &Hand) -> bool {
         } else if c > 2 {
             return false;
         }
-        count_total += c;
     }
-    
+
     // Check total tiles. Should be 14.
     // Assuming the hand passed here has 14 tiles usually.
     // If not checking total, return pair_found.
@@ -133,7 +134,7 @@ pub fn is_standard_agari(hand: &Hand) -> bool {
     // Basic backtracking
     // 1. Find a pair (head)
     // 2. Decompose rest into 4 sequences/triplets
-    
+
     for i in 0..TILE_MAX {
         if hand.counts[i] >= 2 {
             let mut processing_hand = hand.clone();
@@ -152,11 +153,11 @@ fn decompose(hand: &mut Hand, start_idx: usize) -> bool {
     while i < TILE_MAX && hand.counts[i] == 0 {
         i += 1;
     }
-    
+
     if i == TILE_MAX {
         return true; // All tiles used
     }
-    
+
     // Try Koutsu (Triplet)
     if hand.counts[i] >= 3 {
         hand.counts[i] -= 3;
@@ -165,38 +166,31 @@ fn decompose(hand: &mut Hand, start_idx: usize) -> bool {
         }
         hand.counts[i] += 3; // backtrack
     }
-    
+
     // Try Shuntsu (Sequence) - Only for number tiles
     // 0-8: man, 9-17: pin, 18-26: sou. 27+: honors (no seq)
     if i < 27 {
-        // Check boundary for 8, 9, etc.
-        // A sequence starts at i, needs i+1, i+2.
-        // Also check if i is 8 or 9? 
-        // Actually, valid sequences are 123..789.
-        // Indices: 0..8. Max start index is 6 (7-8-9).
-        // Since we map 1m->0, 9m->8.
-        let is_valid_seq_start = match i {
-            0..=6 => true,   // 1m-7m
-            9..=15 => true,  // 1p-7p
-            18..=24 => true, // 1s-7s
-            _ => false,
-        };
-        
-        if is_valid_seq_start {
-            if hand.counts[i+1] > 0 && hand.counts[i+2] > 0 {
+        if let Some(is_valid_seq_start) = match i {
+            0..=6 => Some(true),   // 1m-7m
+            9..=15 => Some(true),  // 1p-7p
+            18..=24 => Some(true), // 1s-7s
+            _ => None,
+        } {
+            if is_valid_seq_start && hand.counts[i + 1] > 0 && hand.counts[i + 2] > 0 {
                 hand.counts[i] -= 1;
-                hand.counts[i+1] -= 1;
-                hand.counts[i+2] -= 1;
-                if decompose(hand, i) { // Stay at i, might have more runs
+                hand.counts[i + 1] -= 1;
+                hand.counts[i + 2] -= 1;
+                if decompose(hand, i) {
+                    // Stay at i, might have more runs
                     return true;
                 }
                 // backtrack
                 hand.counts[i] += 1;
-                hand.counts[i+1] += 1;
-                hand.counts[i+2] += 1;
+                hand.counts[i + 1] += 1;
+                hand.counts[i + 2] += 1;
             }
         }
     }
-    
+
     false
 }

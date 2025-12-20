@@ -54,7 +54,7 @@ impl Default for Hand {
     }
 }
 
-#[pyclass]
+#[pyclass(eq, eq_int)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MeldType {
     Chi = 0,
@@ -120,6 +120,7 @@ pub struct Conditions {
 
 #[pymethods]
 impl Conditions {
+    #[allow(clippy::too_many_arguments)]
     #[new]
     #[pyo3(signature = (tsumo=false, riichi=false, double_riichi=false, ippatsu=false, haitei=false, houtei=false, rinshan=false, chankan=false, tsumo_first_turn=false, player_wind=0, round_wind=0, kyoutaku=0, tsumi=0))]
     pub fn new(
@@ -178,6 +179,7 @@ pub struct Agari {
 
 #[pymethods]
 impl Agari {
+    #[allow(clippy::too_many_arguments)]
     #[new]
     #[pyo3(signature = (agari, yakuman=false, ron_agari=0, tsumo_agari_oya=0, tsumo_agari_ko=0, yaku=vec![], han=0, fu=0))]
     pub fn new(
@@ -202,4 +204,3 @@ impl Agari {
         }
     }
 }
-

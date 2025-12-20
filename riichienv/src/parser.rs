@@ -12,7 +12,7 @@ struct TileManager {
     // 5m (4): 16, 17, 18, 19. 16 is red (0m). 17-19 black.
     // 5p (13): 52, 53, 54, 55. 52 is red (0p). 53-55 black.
     // 5s (22): 88, 89, 90, 91. 88 is red (0s). 89-91 black.
-    
+
     // We track which indices (0..4) are used for each tile (0..33).
     used: [[bool; 4]; 34],
 }
@@ -30,9 +30,9 @@ impl TileManager {
         }
 
         let is_5 = tile_34 == 4 || tile_34 == 13 || tile_34 == 22;
-        
+
         let target_idx = if is_5 && is_red {
-            0 // Red 5 is always index 0 in default encoding convention here? 
+            0 // Red 5 is always index 0 in default encoding convention here?
               // Wait, checking 16%4 == 0. Yes.
         } else {
             // Prefer non-0 indices if 5? Or just any available?
@@ -41,24 +41,41 @@ impl TileManager {
             // If index 0 is unused (red still there), check if we can pick 1,2,3.
             if is_5 {
                 // Try 1, 2, 3 first
-                if !self.used[tile_34][1] { 1 }
-                else if !self.used[tile_34][2] { 2 }
-                else if !self.used[tile_34][3] { 3 }
-                else if !self.used[tile_34][0] { 0 } // Fallback to 0 (red) if forced? Usually 0m != 5m in text. 
+                if !self.used[tile_34][1] {
+                    1
+                } else if !self.used[tile_34][2] {
+                    2
+                } else if !self.used[tile_34][3] {
+                    3
+                } else if !self.used[tile_34][0] {
+                    0
+                }
+                // Fallback to 0 (red) if forced? Usually 0m != 5m in text.
                 // But if input says "5m" and we ran out of blacks? Text should be consistent.
-                else { return Err(format!("No more copies of tile {}", tile_34)); }
+                else {
+                    return Err(format!("No more copies of tile {}", tile_34));
+                }
             } else {
                 // Any unused
-                if !self.used[tile_34][0] { 0 }
-                else if !self.used[tile_34][1] { 1 }
-                else if !self.used[tile_34][2] { 2 }
-                else if !self.used[tile_34][3] { 3 }
-                else { return Err(format!("No more copies of tile {}", tile_34)); }
+                if !self.used[tile_34][0] {
+                    0
+                } else if !self.used[tile_34][1] {
+                    1
+                } else if !self.used[tile_34][2] {
+                    2
+                } else if !self.used[tile_34][3] {
+                    3
+                } else {
+                    return Err(format!("No more copies of tile {}", tile_34));
+                }
             }
         };
 
         if self.used[tile_34][target_idx] {
-             return Err(format!("Tile {} index {} already used", tile_34, target_idx));
+            return Err(format!(
+                "Tile {} index {} already used",
+                tile_34, target_idx
+            ));
         }
         self.used[tile_34][target_idx] = true;
         Ok(((tile_34 * 4) + target_idx) as u8)
@@ -73,7 +90,7 @@ pub fn parse_hand(text: &str) -> PyResult<(Vec<u8>, Vec<Meld>)> {
     let mut melds = Vec::new();
 
     let mut chars = text.chars().peekable();
-    
+
     // Accumulate digits for a suit block
     let mut pending_digits: Vec<char> = Vec::new();
 
@@ -82,7 +99,7 @@ pub fn parse_hand(text: &str) -> PyResult<(Vec<u8>, Vec<Meld>)> {
             chars.next(); // consume '('
             let meld = parse_meld(&mut chars, &mut tm)?;
             melds.push(meld);
-        } else if c.is_digit(10) {
+        } else if c.is_ascii_digit() {
             chars.next();
             pending_digits.push(c);
         } else if is_suit(c) {
@@ -102,18 +119,22 @@ pub fn parse_hand(text: &str) -> PyResult<(Vec<u8>, Vec<Meld>)> {
                 } else {
                     (suit_offset + val - 1, false)
                 };
-                let tid = tm.get_tile(tile_34, is_red).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))?;
+                let tid = tm
+                    .get_tile(tile_34, is_red)
+                    .map_err(PyErr::new::<pyo3::exceptions::PyValueError, _>)?;
                 tiles_136.push(tid);
             }
             pending_digits.clear();
         } else {
             // Ignore whitespace or error?
-            chars.next(); 
+            chars.next();
         }
     }
-    
+
     if !pending_digits.is_empty() {
-         return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>("Pending digits without suit"));
+        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+            "Pending digits without suit",
+        ));
     }
 
     Ok((tiles_136, melds))
@@ -129,7 +150,7 @@ fn parse_meld(chars: &mut Peekable<Chars>, tm: &mut TileManager) -> PyResult<Mel
     // (pXCIr) -> Pon
     // (kXCIr) -> Kan (Closed/Daimin)
     // (sXCIr) -> AddedKan
-    
+
     // Read unitl ')'
     let mut content = String::new();
     while let Some(&c) = chars.peek() {
@@ -140,71 +161,91 @@ fn parse_meld(chars: &mut Peekable<Chars>, tm: &mut TileManager) -> PyResult<Mel
         content.push(c);
         chars.next();
     }
-    
+
     // Analyze prefix
-    let (prefix, rest) = if content.starts_with('p') {
-        ('p', &content[1..])
-    } else if content.starts_with('k') {
-        ('k', &content[1..])
-    } else if content.starts_with('s') {
-        ('s', &content[1..])
+    let (prefix, rest) = if let Some(stripped) = content.strip_prefix('p') {
+        ('p', stripped)
+    } else if let Some(stripped) = content.strip_prefix('k') {
+        ('k', stripped)
+    } else if let Some(stripped) = content.strip_prefix('s') {
+        ('s', stripped)
     } else {
         (' ', content.as_str()) // Chi or error?
     };
 
     // Chi format: "123m1" -> digits, suit, index
     // Other format: "1z1" -> digit (or digits?), suit, index, optional 'r'?
-    
+
     // Parse digits
     let mut digits = Vec::new();
-    let mut remaining_str = rest;
+    let remaining_str = rest;
     let mut suit_char = ' ';
-    
+
     // Extract digits loop
     let mut idx = 0;
     let chars_vec: Vec<char> = remaining_str.chars().collect();
-    while idx < chars_vec.len() && chars_vec[idx].is_digit(10) {
+    while idx < chars_vec.len() && chars_vec[idx].is_ascii_digit() {
         digits.push(chars_vec[idx]);
         idx += 1;
     }
-    
+
     if idx < chars_vec.len() {
         suit_char = chars_vec[idx];
         idx += 1; // consume suit
     }
-    
+
     // Check call index
     let _call_idx = if idx < chars_vec.len() {
         let c = chars_vec[idx];
-        if c.is_digit(10) {
-            idx+=1;
+        if c.is_ascii_digit() {
             c.to_digit(10).unwrap()
-        } else { 0 } // Default or error?
-    } else { 0 }; // Default if not present (Closed Kan?)
+        } else {
+            0
+        } // Default or error?
+    } else {
+        0
+    }; // Default if not present (Closed Kan?)
 
     // Remaining (e.g. 'r'?)
-    
+
     let suit_offset = match suit_char {
-        'm' => 0, 'p' => 9, 's' => 18, 'z' => 27,
-        _ => return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid suit in meld: {}", suit_char))),
+        'm' => 0,
+        'p' => 9,
+        's' => 18,
+        'z' => 27,
+        _ => {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "Invalid suit in meld: {}",
+                suit_char
+            )))
+        }
     };
 
     let mut tiles_136 = Vec::new();
-    
+
     // Construct tiles
     // If Chi: 3 digits.
     if prefix == ' ' {
         // Chi
         if digits.len() != 3 {
-             return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>("Chi meld requires 3 digits"));
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Chi meld requires 3 digits",
+            ));
         }
         for d in digits {
             let val = d.to_digit(10).unwrap() as usize;
-            let (tile_34, is_red) = if val == 0 { (suit_offset + 4, true) } else { (suit_offset + val - 1, false) };
-            tiles_136.push(tm.get_tile(tile_34, is_red).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))?);
+            let (tile_34, is_red) = if val == 0 {
+                (suit_offset + 4, true)
+            } else {
+                (suit_offset + val - 1, false)
+            };
+            tiles_136.push(
+                tm.get_tile(tile_34, is_red)
+                    .map_err(PyErr::new::<pyo3::exceptions::PyValueError, _>)?,
+            );
         }
         tiles_136.sort(); // standardize
-        return Ok(Meld::new(MeldType::Chi, tiles_136, true));
+        Ok(Meld::new(MeldType::Chi, tiles_136, true))
     } else {
         // Pon/Kan/AddedKan
         // Usually 1 digit for type (e.g. '1' in 'p1z1'). Or '0' for red pon.
@@ -215,52 +256,65 @@ fn parse_meld(chars: &mut Peekable<Chars>, tm: &mut TileManager) -> PyResult<Mel
         // Note: For red pon (p0m2), it means a pon of 5m involving red 5.
         // How to select which are used?
         // Pon uses 3 copies. Kan uses 4.
-        
+
         let val_d = digits[0].to_digit(10).unwrap() as usize;
-        let (base_34, is_red_indicated) = if val_d == 0 { (suit_offset + 4, true) } else { (suit_offset + val_d - 1, false) };
-        
+        let (base_34, is_red_indicated) = if val_d == 0 {
+            (suit_offset + 4, true)
+        } else {
+            (suit_offset + val_d - 1, false)
+        };
+
         let count = match prefix {
             'p' => 3,
             'k' | 's' => 4,
-            _ => 3
+            _ => 3,
         };
-        
+
         // Populate tiles
         // If red indicated, make sure to include red.
         // If not red indicated, prefer blacks, but if ran out?
-        
+
         let mut got_red = false;
         if is_red_indicated {
             // Need red
-             tiles_136.push(tm.get_tile(base_34, true).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))?);
-             got_red = true;
+            tiles_136.push(
+                tm.get_tile(base_34, true)
+                    .map_err(PyErr::new::<pyo3::exceptions::PyValueError, _>)?,
+            );
+            got_red = true;
         }
 
         // Fill remaining
         while tiles_136.len() < count {
             // Try black first if red already got, or if red not indicated (but might pick red if black out? No, try black)
             // Actually tm.get_tile will error if I specifically ask for one.
-            // I should ask for "standard" (false) and fallback? 
+            // I should ask for "standard" (false) and fallback?
             // My get_tile logic handles fallback slightly? No. 'is_red' arg is stricter.
             // Let's modify usage.
             // If I need any tile, prefer black.
             if let Ok(t) = tm.get_tile(base_34, false) {
                 tiles_136.push(t);
             } else if !got_red {
-                 // Try red if I haven't got it and ran out of black?
-                 // Usually Pon of 5 without red means [5, 5, 5] black.
-                 // But strings might be distinct.
-                 if let Ok(t) = tm.get_tile(base_34, true) {
-                     tiles_136.push(t);
-                     got_red = true;
-                 } else {
-                     return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Not enough tiles for meld of {}", base_34)));
-                 }
+                // Try red if I haven't got it and ran out of black?
+                // Usually Pon of 5 without red means [5, 5, 5] black.
+                // But strings might be distinct.
+                if let Ok(t) = tm.get_tile(base_34, true) {
+                    tiles_136.push(t);
+                    got_red = true;
+                } else {
+                    return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                        "Not enough tiles for meld of {}",
+                        base_34
+                    )));
+                }
             } else {
-                 return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Not enough tiles for meld of {}", base_34)));
+                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "Not enough tiles for meld of {}",
+                    base_34
+                )));
             }
         }
-        
+
         tiles_136.sort();
 
         let mtype = match prefix {
@@ -285,21 +339,25 @@ fn parse_meld(chars: &mut Peekable<Chars>, tm: &mut TileManager) -> PyResult<Mel
                 // I need to use it.
                 // Let's assume idx 1, 2, 3 -> Open.
                 // (k2z) -> 0 -> Ankan.
-                 if _call_idx == 0 { MeldType::Angang } else { MeldType::Gang }
-            },
+                if _call_idx == 0 {
+                    MeldType::Angang
+                } else {
+                    MeldType::Gang
+                }
+            }
             's' => MeldType::Addgang,
             _ => unreachable!(),
         };
-        
+
         // For Angang/Addgang, 'opened' flag logic?
         // Angang: opened=false.
         // Addgang: opened=true.
         // Gang: opened=true.
         // Peng: opened=true.
         // Chi: opened=true.
-        
+
         let opened = mtype != MeldType::Angang;
-        
+
         Ok(Meld::new(mtype, tiles_136, opened))
     }
 }

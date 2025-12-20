@@ -1,11 +1,11 @@
 use pyo3::prelude::*;
 
-mod types;
 mod agari;
-mod yaku;
-mod score;
 mod agari_calculator;
+mod score;
 mod tests;
+mod types;
+mod yaku;
 
 mod parser;
 mod replay;

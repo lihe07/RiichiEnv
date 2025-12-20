@@ -18,10 +18,10 @@ pub fn calculate_score(han: u8, fu: u8, is_oya: bool, is_tsumo: bool) -> Score {
     if han >= 5 {
         // ... (rest logic same)
         let base_points = match han {
-            5 => 2000, // Mangan
-            6 | 7 => 3000, // Haneman
-            8 | 9 | 10 => 4000, // Baiman
-            11 | 12 => 6000, // Sanbaiman
+            5 => 2000,                     // Mangan
+            6 | 7 => 3000,                 // Haneman
+            8..=10 => 4000,                // Baiman
+            11 | 12 => 6000,               // Sanbaiman
             _ => 8000 * (han as u32 / 13), // Yakuman (13, 26, 39, ...)
         };
         make_score_result(base_points, is_oya, is_tsumo)
@@ -39,11 +39,11 @@ pub fn calculate_score(han: u8, fu: u8, is_oya: bool, is_tsumo: bool) -> Score {
 fn make_score_result(base_points: u32, is_oya: bool, is_tsumo: bool) -> Score {
     // Logic reuse ...
     let total_ron = if is_oya {
-            ceil_100(base_points * 6)
-        } else {
-            ceil_100(base_points * 4)
-        };
-        
+        ceil_100(base_points * 6)
+    } else {
+        ceil_100(base_points * 4)
+    };
+
     let (pay_oya, pay_ko) = if is_oya {
         // Oya Tsumo: all ko pay 2 * base
         (0, ceil_100(base_points * 2))
@@ -51,7 +51,7 @@ fn make_score_result(base_points: u32, is_oya: bool, is_tsumo: bool) -> Score {
         // Ko Tsumo: oya pays 2 * base, ko pays 1 * base
         (ceil_100(base_points * 2), ceil_100(base_points))
     };
-    
+
     let total_tsumo = if is_oya {
         pay_ko * 3
     } else {
@@ -79,9 +79,9 @@ fn round_up_fu(fu: u8) -> u8 {
     if fu == 25 {
         return 25; // Chiitoitsu fixed
     }
-    ((fu + 9) / 10) * 10
+    fu.div_ceil(10) * 10
 }
 
 fn ceil_100(val: u32) -> u32 {
-    ((val + 99) / 100) * 100
+    val.div_ceil(100) * 100
 }
