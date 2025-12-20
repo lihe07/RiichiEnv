@@ -24,10 +24,10 @@ Calculates yaku, han, and fu for all winning hands extracted from MJAI logs. Thi
 The following results were obtained by processing 6,503 agari situations extracted from MJAI logs.
 
 | Implementation | Throughput (agari/sec) | Notes |
-| :--- | :--- | :--- |
-| **`riichienv` (Rust Core)** | **~760,000** | Direct calculate on `AgariContext` (Rust side) |
-| **`riichienv` (Python Wrapper)** | **~140,000** | Using `riichienv.AgariCalculator` (Python side) |
-| **`mahjong` (Python Package)** | **~5,500** | Pure Python implementation |
+| :--- | ---: | :--- |
+| **`riichienv` (Rust Core)** | **~762,398.23** | Direct calculate on `AgariContext` (Rust side) |
+| **`riichienv` (Python Wrapper)** | 145,592.33 | Using `riichienv.AgariCalculator` (Python side) |
+| **`mahjong` (Python Package)** | 5,902.76 | Pure Python implementation |
 
 > [!NOTE]
 > `riichienv`'s Rust core is approximately **130x faster** than the pure Python `mahjong` package while maintaining 100% accuracy. The Python wrapper overhead is around 5x, yet it remains significantly faster than the baseline.
