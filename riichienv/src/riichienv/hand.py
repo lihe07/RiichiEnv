@@ -120,8 +120,8 @@ class Conditions:
     chankan: bool = False
     tsumo_first_turn: bool = False
 
-    player_wind: int | Wind = 0 # E,S,W,N = (0,1,2,3) or Wind.East, Wind.South, Wind.West, Wind.North
-    round_wind: int | Wind = 0 # E,S,W,N = (0,1,2,3) or Wind.East, Wind.South, Wind.West, Wind.North
+    player_wind: int | Wind = 0 # E,S,W,N = (0,1,2,3) or Wind enum values
+    round_wind: int | Wind = 0 # E,S,W,N = (0,1,2,3) or Wind enum values
 
     kyoutaku: int = 0
     tsumi: int = 0
