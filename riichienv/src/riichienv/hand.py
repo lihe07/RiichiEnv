@@ -6,6 +6,7 @@ from mahjong.hand_calculating.hand_config import HandConfig, OptionalRules
 from mahjong.meld import Meld
 from mahjong.constants import EAST, SOUTH, WEST, NORTH
 from . import _riichienv as rust_core
+from ._riichienv import Wind
 
 
 @dataclass
@@ -119,8 +120,8 @@ class Conditions:
     chankan: bool = False
     tsumo_first_turn: bool = False
 
-    player_wind: int = 0 # E,S,W,N = (0,1,2,3)
-    round_wind: int = 0 # E,S,W,N = (0,1,2,3)
+    player_wind: int | Wind = 0 # E,S,W,N = (0,1,2,3) or Wind enum values
+    round_wind: int | Wind = 0 # E,S,W,N = (0,1,2,3) or Wind enum values
 
     kyoutaku: int = 0
     tsumi: int = 0
