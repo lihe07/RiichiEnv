@@ -148,6 +148,14 @@ pub fn parse_tile(text: &str) -> PyResult<u8> {
             "No tile found in string",
         ));
     }
+    if tiles.len() != 1 {
+        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+            format!(
+                "Expected exactly one tile, but found {} tiles in string",
+                tiles.len()
+            ),
+        ));
+    }
     Ok(tiles[0])
 }
 
