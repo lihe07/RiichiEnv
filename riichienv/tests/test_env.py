@@ -1,5 +1,3 @@
-import pytest
-
 from riichienv import RiichiEnv
 from riichienv.agents import RandomAgent
 from riichienv.env import Observation
