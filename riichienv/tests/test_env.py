@@ -177,7 +177,7 @@ class TestRiichiEnv:
         # P1 performs PON
         # Manual: consume [1, 2]
         action = Action(ActionType.PON, tile=0, consume_tiles=[1, 2])
-        obs_dict = env.step({1: action})
+        env.step({1: action})
         
         # P1 should now be current player (WAIT_ACT)
         assert env.current_player == 1
