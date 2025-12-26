@@ -7,9 +7,9 @@ class ActionType(IntEnum):
     CHI = 1
     PON = 2
     DAIMINKAN = 3 # Open Kan
-    RON = 4
-    RIICHI = 5
-    TSUMO = 6
+    RON = 4 # Claim win
+    RIICHI = 5 # Declare Riichi
+    TSUMO = 6 # Self-draw win
     PASS = 7 # Pass on claim
     ANKAN = 8 # Closed Kan
     KAKAN = 9 # Add Kan (Chankan)

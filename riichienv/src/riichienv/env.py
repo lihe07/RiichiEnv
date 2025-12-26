@@ -216,26 +216,17 @@ class RiichiEnv:
                 
             action: Action = action_raw
             
-            # ... Discard process ...
-            # For now, let's assume we proceed with discard.
-            # If ActionType.TSUMO -> End.
-            
-            # Default logic for discard (same as before but updated)
-            # 1. Discard
             discard_tile_id = -1
             
             if action.type == ActionType.TSUMO:
                 # Handle tsumo (self-draw win): record the event and stop further processing.
-                tsumo_event = {
-                    "type": "tsumo",
+                hora_event = {
+                    "type": "hora",
                     "actor": self.current_player,
+                    "target": self.current_player,
                 }
-                if self.drawn_tile is not None:
-                    tsumo_event["pai"] = _to_mjai_tile(self.drawn_tile)
+                self.mjai_log.append(hora_event)
 
-                self.mjai_log.append(tsumo_event)
-                # After a tsumo win, no discard should occur; return observations immediately.abs
-                
                 # Set is_done to True
                 self.is_done = True
                 
@@ -518,16 +509,12 @@ class RiichiEnv:
             
             # Tsumo logic
             if self.drawn_tile is not None: # Only possible if just drawn
-                calc = AgariCalculator(hand, [])
-                # Pass drawn_tile as win_tile (it's already in hand, but for calc API constraints...)
-                # See earlier note: pass 13 tiles + win_tile.
-                # Here 'hand' has 14 tiles.
-                # With 14 tiles, if we pass win_tile, wrapper might fail.
-                # Let's recreate 13+1.
                 hand_13 = hand[:]
-                hand_13.remove(self.drawn_tile)
+                if self.drawn_tile in hand_13:
+                    hand_13.remove(self.drawn_tile)
                 
-                res = AgariCalculator(hand_13, []).calc(self.drawn_tile, conditions=Conditions(tsumo=True))
+                player_melds = self.melds.get(pid, [])
+                res = AgariCalculator(hand_13, player_melds).calc(self.drawn_tile, conditions=Conditions(tsumo=True))
                 if res.agari:
                     actions.append(Action(ActionType.TSUMO))
 
