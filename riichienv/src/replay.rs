@@ -1,6 +1,8 @@
 use flate2::read::GzDecoder;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::types::{PyDict, PyList};
+
 use serde::{Deserialize, Serialize};
 // use serde_json::Value; // Unused
 use std::fs::File;
@@ -345,6 +347,195 @@ pub struct Kyoku {
 impl Kyoku {
     fn take_agari_contexts(&self) -> PyResult<AgariContextIterator> {
         Ok(AgariContextIterator::new(self.clone()))
+    }
+
+    fn events(&self, py: Python) -> PyResult<PyObject> {
+        let events = PyList::empty(py);
+
+        // Name: NewRound
+        let nr_event = PyDict::new(py);
+        nr_event.set_item("name", "NewRound")?;
+        let nr_data = PyDict::new(py);
+
+        nr_data.set_item("scores", self._scores.clone())?;
+
+        if !self.doras.is_empty() {
+            let d_list = PyList::new(py, self.doras.iter().map(|t| TileConverter::to_string(*t)))?;
+
+            nr_data.set_item("doras", d_list)?;
+        } else {
+            nr_data.set_item("doras", PyList::empty(py))?;
+        }
+
+        if let Some(first) = self.doras.first() {
+            nr_data.set_item("dora_marker", TileConverter::to_string(*first))?;
+        }
+
+        for i in 0..4 {
+            let hand_list = PyList::new(
+                py,
+                self.hands[i].iter().map(|t| TileConverter::to_string(*t)),
+            )?;
+
+            nr_data.set_item(format!("tiles{}", i), hand_list)?;
+        }
+
+        nr_data.set_item("chang", self.chang)?;
+        nr_data.set_item("ju", self.ju)?;
+        nr_data.set_item("ben", self.ben)?;
+        nr_data.set_item("liqibang", self.liqibang)?;
+        nr_data.set_item("left_tile_count", self.left_tile_count)?;
+
+        if !self.ura_doras.is_empty() {
+            let ud_list = PyList::new(
+                py,
+                self.ura_doras.iter().map(|t| TileConverter::to_string(*t)),
+            )?;
+
+            nr_data.set_item("ura_doras", ud_list)?;
+        }
+
+        nr_event.set_item("data", nr_data)?;
+        events.append(nr_event)?;
+
+        // Actions
+        for action in self.actions.iter() {
+            let a_event = PyDict::new(py);
+            let a_data = PyDict::new(py);
+
+            match action {
+                Action::DiscardTile {
+                    seat,
+                    tile,
+                    is_liqi,
+                    is_wliqi,
+                    doras,
+                } => {
+                    a_event.set_item("name", "DiscardTile")?;
+                    a_data.set_item("seat", seat)?;
+                    a_data.set_item("tile", TileConverter::to_string(*tile))?;
+                    a_data.set_item("is_liqi", is_liqi)?;
+                    a_data.set_item("is_wliqi", is_wliqi)?;
+                    if let Some(d) = doras {
+                        let d_list =
+                            PyList::new(py, d.iter().map(|t| TileConverter::to_string(*t)))?;
+
+                        a_data.set_item("doras", d_list)?;
+                    }
+                }
+                Action::DealTile {
+                    seat,
+                    tile,
+                    doras,
+                    left_tile_count,
+                } => {
+                    a_event.set_item("name", "DealTile")?;
+                    a_data.set_item("seat", seat)?;
+                    a_data.set_item("tile", TileConverter::to_string(*tile))?;
+                    if let Some(d) = doras {
+                        let d_list =
+                            PyList::new(py, d.iter().map(|t| TileConverter::to_string(*t)))?;
+                        a_data.set_item("doras", d_list)?;
+                    }
+                    if let Some(ltc) = left_tile_count {
+                        a_data.set_item("left_tile_count", ltc)?;
+                    }
+                }
+                Action::ChiPengGang {
+                    seat,
+                    meld_type,
+                    tiles,
+                    froms,
+                } => {
+                    a_event.set_item("name", "ChiPengGang")?;
+                    a_data.set_item("seat", seat)?;
+                    let mt_int = match meld_type {
+                        MeldType::Chi => 0,
+                        MeldType::Peng => 1,
+                        MeldType::Gang => 2,
+                        MeldType::Angang => 3,
+                        MeldType::Addgang => 2,
+                    };
+                    a_data.set_item("type", mt_int)?;
+                    let t_list =
+                        PyList::new(py, tiles.iter().map(|t| TileConverter::to_string(*t)))?;
+
+                    a_data.set_item("tiles", t_list)?;
+                    a_data.set_item("froms", froms.clone())?;
+                }
+
+                Action::AnGangAddGang {
+                    seat,
+                    meld_type,
+                    tiles,
+                    tile_raw_id: _,
+                    doras,
+                } => {
+                    a_event.set_item("name", "AnGangAddGang")?;
+                    a_data.set_item("seat", seat)?;
+                    let mt_int = match meld_type {
+                        MeldType::Angang => 3,
+                        _ => 2,
+                    };
+                    a_data.set_item("type", mt_int)?;
+                    if let Some(first) = tiles.first() {
+                        a_data.set_item("tiles", TileConverter::to_string(*first))?;
+                    }
+                    if let Some(d) = doras {
+                        let d_list =
+                            PyList::new(py, d.iter().map(|t| TileConverter::to_string(*t)))?;
+                        a_data.set_item("doras", d_list)?;
+                    }
+                }
+                Action::Hule { hules } => {
+                    a_event.set_item("name", "Hule")?;
+                    let h_list = PyList::empty(py);
+                    for h in hules {
+                        let h_dict = PyDict::new(py);
+                        h_dict.set_item("seat", h.seat)?;
+                        h_dict.set_item("hu_tile", TileConverter::to_string(h.hu_tile))?;
+                        h_dict.set_item("zimo", h.zimo)?;
+                        h_dict.set_item("count", h.count)?;
+                        h_dict.set_item("fu", h.fu)?;
+                        let f_list = PyList::empty(py);
+                        for f_id in &h.fans {
+                            let f_dict = PyDict::new(py);
+                            f_dict.set_item("id", f_id)?;
+                            f_list.append(f_dict)?;
+                        }
+                        h_dict.set_item("fans", f_list)?;
+                        h_dict.set_item("point_rong", h.point_rong)?;
+                        h_dict.set_item("point_zimo_qin", h.point_zimo_qin)?;
+                        h_dict.set_item("point_zimo_xian", h.point_zimo_xian)?;
+                        h_dict.set_item("yiman", h.yiman)?;
+                        if let Some(ld) = &h.li_doras {
+                            let ld_list =
+                                PyList::new(py, ld.iter().map(|t| TileConverter::to_string(*t)))?;
+                            h_dict.set_item("li_doras", ld_list)?;
+                        }
+                        h_list.append(h_dict)?;
+                    }
+                    a_data.set_item("hules", h_list)?;
+                }
+                Action::Dora { dora_marker } => {
+                    a_event.set_item("name", "Dora")?;
+                    a_data.set_item("dora_marker", TileConverter::to_string(*dora_marker))?;
+                }
+                Action::NoTile => {
+                    a_event.set_item("name", "NoTile")?;
+                }
+                Action::LiuJu => {
+                    a_event.set_item("name", "LiuJu")?;
+                }
+                Action::Other(_) => {
+                    continue;
+                }
+            }
+            a_event.set_item("data", a_data)?;
+            events.append(a_event)?;
+        }
+
+        Ok(events.into())
     }
 }
 
@@ -1001,6 +1192,24 @@ impl TileConverter {
         } else {
             id_34 * 4
         }
+    }
+
+    pub fn to_string(tile: u8) -> String {
+        let t34 = tile / 4;
+        let is_red = tile == 16 || tile == 52 || tile == 88;
+        let suit_idx = t34 / 9;
+        let num = t34 % 9 + 1;
+        let suit = match suit_idx {
+            0 => "m",
+            1 => "p",
+            2 => "s",
+            3 => "z",
+            _ => return "?".to_string(),
+        };
+        if is_red {
+            return format!("0{}", suit);
+        }
+        format!("{}{}", num, suit)
     }
 
     fn match_and_remove_u8(hand: &mut Vec<u8>, target: u8) -> bool {

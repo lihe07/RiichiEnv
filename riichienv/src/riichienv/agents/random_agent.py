@@ -1,0 +1,17 @@
+import random
+
+from riichienv.action import Action
+from riichienv.env import Observation
+
+
+class RandomAgent:
+    def __init__(self, seed: int | None = None):
+        self._rng = random.Random(seed)
+
+    def act(self, obs: Observation) -> Action:
+        """
+        Returns a valid Action object (DISCARD, RON, etc).
+        For now, mostly discards randomly from legal moves.
+        """
+        legal = obs.legal_actions()
+        return self._rng.choice(legal)

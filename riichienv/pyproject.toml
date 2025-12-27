@@ -3,9 +3,9 @@ name = "riichienv"
 version = "0.1.0"
 description = "A Modular, High-Performance Research Environment for Riichi Mahjong"
 readme = "README.md"
-requires-python = ">=3.10"
+# PyO3 0.23.5 does not support Python 3.14 yet
+requires-python = ">=3.10,<3.14"
 dependencies = [
-    "mahjong==1.4.0",
     "pyyaml>=6.0.3",
 ]
 
@@ -21,7 +21,28 @@ module-name = "riichienv._riichienv"
 dev = [
     "pre-commit>=4.5.1",
     "pytest",
+    "ruff>=0.8.0",
+    "ty>=0.0.7",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = ["trunk", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP"]
+ignore = []
+
+
+
 
 [project.scripts]
 test = "pytest:console_main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["trunk"]
+
+[tool.ty.src]
+exclude = ["scripts", "tests"]
