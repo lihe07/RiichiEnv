@@ -395,7 +395,7 @@ class RiichiEnv:
             self.current_player = (self.current_player + 1) % 4
             if not self.wall:
                 self.is_done = True
-                self.mjai_log.append({"type": "ryukyoku", "reason": ""})  # Exhaustive draw
+                self.mjai_log.append({"type": "ryukyoku", "reason": "exhaustive_draw"})  # Exhaustive draw
                 self.mjai_log.append({"type": "end_kyoku"})
                 self.mjai_log.append({"type": "end_game"})
                 return self._get_observations([])
