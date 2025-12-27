@@ -1,4 +1,4 @@
-name: CI
+name: Rust Lint and Format
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   lint-and-test:
-    name: Lint and Test
+    name: rustfmt and clippy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

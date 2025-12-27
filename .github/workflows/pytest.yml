@@ -1,4 +1,4 @@
-name: pytest
+name: Python Unit Tests
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 
 jobs:
   test:
-    name: Run tests with uv
+    name: pytest
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -25,4 +25,4 @@ jobs:
       - name: Run tests
         run: |
           cd riichienv
-          uv run --python 3.13 pytest tests
+          uv run --python 3.13 pytest

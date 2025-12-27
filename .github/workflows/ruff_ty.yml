@@ -1,4 +1,4 @@
-name: Lint and Type Check
+name: Python Lint and Type Check
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
 
 jobs:
   lint:
+    name: ruff and ty
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
