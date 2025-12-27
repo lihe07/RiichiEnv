@@ -37,7 +37,14 @@ The following results were obtained by processing 6,503 agari situations extract
 To run the benchmark on your machine:
 
 ```bash
-cd riichienv
-# Ensure you have the game log directory `data/game_record_4p_thr_2025-12-14_out/`
-./.venv/bin/python scripts/bench/bench_agari_mahjong.py
+❯ cd ../benchmark
+❯ uv run bench_agari_mahjong.py
+Uninstalled 1 package in 1ms
+Installed 1 package in 3ms
+Total Agari situations: 6503
+riichienv: 0.0080s (814706.50 agari/sec)
+riichienv-py: 0.0416s (156297.97 agari/sec)
+mahjong:   1.0810s (6015.68 agari/sec)
 ```
+
+See details in [DEVEL.md](DEVEL.md#benchmarks).

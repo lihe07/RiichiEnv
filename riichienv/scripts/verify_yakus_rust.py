@@ -1,8 +1,10 @@
+import argparse
 import glob
 import os
 import time
-import argparse
+
 from riichienv import ReplayGame
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -11,14 +13,14 @@ def main():
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     logs_pattern = os.path.join(script_dir, "..", args.logs)
-    
+
     log_files = glob.glob(logs_pattern)
     if not log_files:
         print(f"No log files found at {logs_pattern}")
         return
 
     print(f"Found {len(log_files)} log files.")
-    
+
     total_agari = 0
     mismatches = 0
     errors = 0
@@ -34,20 +36,20 @@ def main():
             t0 = time.time()
             game = ReplayGame.from_json(log_path)
             t1 = time.time()
-            total_parse_time += (t1 - t0)
-            
+            total_parse_time += t1 - t0
+
             t0 = time.time()
             # Correct iteration: ReplayGame -> KyokuIterator -> AgariContextIterator
             for kyoku in game.take_kyokus():
                 for ctx in kyoku.take_agari_contexts():
                     total_agari += 1
-                    
+
                     actual = ctx.actual
-                    
+
                     expected_han = ctx.expected_han
                     expected_fu = ctx.expected_fu
                     expected_yaku = set(ctx.expected_yaku)
-                    
+
                     # Normalize Yakuman Han (MJAI log uses 1 for 1 unit of Yakuman)
                     # If any expected yaku is a Yakuman and han is small, normalize to 13-multiple
                     is_yakuman = any(y in yakuman_ids for y in expected_yaku)
@@ -59,10 +61,10 @@ def main():
                     else:
                         actual_fu = actual.fu
                         normalized_expected_fu = expected_fu
-                    
+
                     han_match = actual.han == expected_han
                     fu_match = actual_fu == normalized_expected_fu
-                    
+
                     if not (han_match and fu_match):
                         mismatches += 1
                         print(f"Mismatch in {log_path}:")
@@ -73,7 +75,7 @@ def main():
                         print(f"  Yaku Actual:   {actual.yaku}")
 
             t1 = time.time()
-            total_verify_time += (t1 - t0)
+            total_verify_time += t1 - t0
 
         except Exception as e:
             print(f"Error processing {log_path}: {e}")
@@ -91,6 +93,7 @@ def main():
     if total_agari > 0:
         print(f"Accuracy: {(total_agari - mismatches) / total_agari * 100:.2f}%")
         print(f"Throughput: {total_agari / duration:.2f} agari/sec")
+
 
 if __name__ == "__main__":
     main()

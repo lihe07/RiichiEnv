@@ -1,16 +1,17 @@
-from typing import Any
+import gzip
+import json
+import time
 from enum import Enum
 from pathlib import Path
-import time
-import yaml
-import json
-import gzip
+from typing import Any
 
-from riichienv import AgariCalculator, Conditions, Agari, Meld, MeldType as RiichiMeldType
+import yaml
 from mahjong.tile import TilesConverter
 
+from riichienv import AgariCalculator, Conditions, Meld
+from riichienv import MeldType as RiichiMeldType
 
-with open("./data/yans.yml", "r") as f:
+with open("./data/yans.yml") as f:
     fans = yaml.load(f, Loader=yaml.SafeLoader)["fans"]
 
 
@@ -21,6 +22,7 @@ def load_game_record(path: str) -> dict:
 
 
 Hand = list[str]
+
 
 class MeldType(Enum):
     CHI = 0
@@ -57,11 +59,11 @@ class Round:
 
         self.doras = new_round_data["doras"]
         self.left_tile_count = new_round_data["left_tile_count"]
-        self.chang = new_round_data["chang"] # 場
-        self.ju = new_round_data["ju"] # 局
-        self.ben = new_round_data["ben"] # 本場
-        self.liqibang = new_round_data["liqibang"] # 供託
-        
+        self.chang = new_round_data["chang"]  # 場
+        self.ju = new_round_data["ju"]  # 局
+        self.ben = new_round_data["ben"]  # 本場
+        self.liqibang = new_round_data["liqibang"]  # 供託
+
         self.kakan_tile = None
         self.last_action_was_kakan = False
 
@@ -95,7 +97,7 @@ class Round:
                 case MeldType.ADDGANG:
                     # 対応するポンを明槓にする
                     meld_type, meld_tiles = meld_tuple
-                    kan_tile_str: str = meld_tiles[0] # 1枚のみ
+                    kan_tile_str: str = meld_tiles[0]  # 1枚のみ
                     kan_tile_int: int = self._get_tile(kan_tile_str)
                     hola_tiles += [kan_tile_int]
 
@@ -134,12 +136,12 @@ class Round:
         )[0]
 
     def _apply_hule(self, action: dict[str, Any]) -> None:
-        name, data = action["name"], action["data"]
+        _name, data = action["name"], action["data"]
 
         for hule in data["hules"]:
             seat = hule["seat"]
-            tiles = list(sorted(self.hands[seat]))
-            melds = self.melds[seat]
+            list(sorted(self.hands[seat]))
+            self.melds[seat]
             is_zimo = hule["zimo"]
 
             assert self.liqi[seat] == hule["liqi"]
@@ -165,28 +167,33 @@ class Round:
                 kakan_tile_34 = self._get_tile(self.kakan_tile) // 4
                 if hu_tile_34 == kakan_tile_34:
                     is_chankan = True
-            
+
             actual_ippatsu = self.ippatsu[seat]
 
             agari_calc = AgariCalculator(
                 tiles=hola_tiles,
                 melds=melds_,
             )
-            r2 = agari_calc.calc(win_tile, dora_indicators, Conditions(
-                tsumo=is_zimo,
-                riichi=self.liqi[seat],
-                double_riichi=self.wliqi[seat],
-                ippatsu=actual_ippatsu,
-                haitei=(self.left_tile_count == 0) and is_zimo and not self.rinshan[seat],
-                houtei=(self.left_tile_count == 0) and not is_zimo and not self.rinshan[seat],
-                rinshan=self.rinshan[seat],
-                chankan=is_chankan,
-                tsumo_first_turn=self.is_first_turn[seat],
-                kyoutaku=self.liqibang,
-                tsumi=self.ben,
-                player_wind=(seat - self.ju + 4) % 4,
-                round_wind=self.chang,
-            ), ura_indicators=ura_indicators)
+            r2 = agari_calc.calc(
+                win_tile,
+                dora_indicators,
+                Conditions(
+                    tsumo=is_zimo,
+                    riichi=self.liqi[seat],
+                    double_riichi=self.wliqi[seat],
+                    ippatsu=actual_ippatsu,
+                    haitei=(self.left_tile_count == 0) and is_zimo and not self.rinshan[seat],
+                    houtei=(self.left_tile_count == 0) and not is_zimo and not self.rinshan[seat],
+                    rinshan=self.rinshan[seat],
+                    chankan=is_chankan,
+                    tsumo_first_turn=self.is_first_turn[seat],
+                    kyoutaku=self.liqibang,
+                    tsumi=self.ben,
+                    player_wind=(seat - self.ju + 4) % 4,
+                    round_wind=self.chang,
+                ),
+                ura_indicators=ura_indicators,
+            )
 
             # 和了判定の検証
             if not r2.agari:
@@ -197,9 +204,9 @@ class Round:
                 print(f"Internal r2: {r2}")
             assert r2.agari
             assert hule["yiman"] == r2.yakuman
- 
+
             if hule["yiman"]:
-                assert r2.yakuman # 役満の役
+                assert r2.yakuman  # 役満の役
             else:
                 if r2.han != hule["count"]:
                     print(f"Han Mismatch: seat={seat}")
@@ -208,7 +215,9 @@ class Round:
                     print(f"Hand: {hule['hand']} + {hule['hu_tile']}")
                     print(f"Melds: {self.melds[seat]}")
                     print(f"Liqi: {self.liqi[seat]}")
-                    print(f"Sim Conditions: ippatsu={actual_ippatsu}, chankan={is_chankan}, first_turn={self.is_first_turn[seat]}, rinshan={self.rinshan[seat]}")
+                    print(
+                        f"Sim Conditions: ippatsu={actual_ippatsu}, chankan={is_chankan}, first_turn={self.is_first_turn[seat]}, rinshan={self.rinshan[seat]}"
+                    )
                     print(f"Expected: Han={hule['count']}, Fans={hule['fans']}")
                     print(f"Actual: Han={r2.han}, Yaku IDs={r2.yaku}, Fu={r2.fu}")
                 assert r2.han == hule["count"]
@@ -216,27 +225,27 @@ class Round:
             valid_fans = [f for f in hule["fans"] if f["id"] not in [31, 32, 33]]
             r2_valid_yaku = [mjsoul_id for mjsoul_id in r2.yaku if mjsoul_id not in [31, 32, 33]]
             if len(valid_fans) != len(r2_valid_yaku):
-                 print(f"Mismatch Yaku Count: seat={seat}")
-                 print(f"Expected Fans: {[f['id'] for f in valid_fans]}")
-                 print(f"Actual IDs: {r2_valid_yaku}")
-                 print(f"Hand: {hule['hand']} + {hule['hu_tile']}")
-                 print(f"Agari: {r2}")
+                print(f"Mismatch Yaku Count: seat={seat}")
+                print(f"Expected Fans: {[f['id'] for f in valid_fans]}")
+                print(f"Actual IDs: {r2_valid_yaku}")
+                print(f"Hand: {hule['hand']} + {hule['hu_tile']}")
+                print(f"Agari: {r2}")
             assert len(valid_fans) == len(r2_valid_yaku)
 
             if not is_zimo:
-                assert hule["point_rong"] == r2.ron_agari # 直接の得点
+                assert hule["point_rong"] == r2.ron_agari  # 直接の得点
             else:
                 # For self-draw, hule provides point_zimo_qin (from oya) and point_zimo_xian (from ko)
                 # r2 provides tsumo_agari_oya (from oya) and tsumo_agari_ko (from ko)
-                assert hule["point_zimo_qin"] == r2.tsumo_agari_oya # 親からの得点
-                assert hule["point_zimo_xian"] == r2.tsumo_agari_ko # 子からの得点
+                assert hule["point_zimo_qin"] == r2.tsumo_agari_oya  # 親からの得点
+                assert hule["point_zimo_xian"] == r2.tsumo_agari_ko  # 子からの得点
 
-    def apply_action(self, action : dict[str, Any]) -> None:
+    def apply_action(self, action: dict[str, Any]) -> None:
         name, data = action["name"], action["data"]
 
         if name != "Hule":
             self.rinshan = [False] * 4
-            
+
         if name not in ["Hule", "AnGangAddGang", "NoTile", "LiuJu"]:
             if self.last_action_was_kakan:
                 self.ippatsu = [False] * 4
@@ -256,7 +265,7 @@ class Round:
 
                 if not data["is_liqi"]:
                     self.ippatsu[data["seat"]] = False
-                
+
                 self.is_first_turn[data["seat"]] = False
 
                 self.hands[data["seat"]].remove(data["tile"])
@@ -290,7 +299,7 @@ class Round:
                     self.ippatsu = [False] * 4
                     self.is_first_turn = [False] * 4
                     self.last_action_was_kakan = False
-                    
+
                     tiles_ = [data["tiles"]] * 4
                     if data["tiles"][0] in ["0", "5"] and data["tiles"][1] != "z":
                         tiles_ = ["5" + data["tiles"][1]] * 3 + ["0" + data["tiles"][1]]

@@ -1,12 +1,8 @@
 from dataclasses import dataclass, field
 
-from mahjong.hand_calculating.hand import HandCalculator
-from mahjong.tile import TilesConverter
-from mahjong.hand_calculating.hand_config import HandConfig, OptionalRules
-from .meld import Meld
-from mahjong.constants import EAST, SOUTH, WEST, NORTH
 from . import _riichienv as rust_core
 from ._riichienv import Wind
+from .meld import Meld
 
 
 @dataclass
@@ -36,7 +32,6 @@ class YakuList:
         Yaku(name="役牌 白", name_en="Yakuhai (haku)", mjsoul_id=7, tenhou_id=18),
         Yaku(name="役牌 發", name_en="Yakuhai (hatsu)", mjsoul_id=8, tenhou_id=19),
         Yaku(name="役牌 中", name_en="Yakuhai (chun)", mjsoul_id=9, tenhou_id=20),
-
         # 2 Han
         Yaku(name="ダブル立直", name_en="Double Riichi", mjsoul_id=18, tenhou_id=21),
         Yaku(name="七対子", name_en="Chiitoitsu", mjsoul_id=25, tenhou_id=22),
@@ -49,15 +44,12 @@ class YakuList:
         Yaku(name="三暗刻", name_en="San Ankou", mjsoul_id=22, tenhou_id=29),
         Yaku(name="小三元", name_en="Shou Sangen", mjsoul_id=23, tenhou_id=30),
         Yaku(name="混老頭", name_en="Honroutou", mjsoul_id=24, tenhou_id=31),
-
         # 3 Han
         Yaku(name="二盃口", name_en="Ryanpeikou", mjsoul_id=28, tenhou_id=32),
         Yaku(name="純全帯幺九", name_en="Junchan", mjsoul_id=26, tenhou_id=33),
         Yaku(name="混一色", name_en="Honitsu", mjsoul_id=27, tenhou_id=34),
-
         # 6 Han
         Yaku(name="清一色", name_en="Chinitsu", mjsoul_id=29, tenhou_id=35),
-
         # Yakuman
         Yaku(name="天和", name_en="Tenhou", mjsoul_id=35, tenhou_id=37),
         Yaku(name="地和", name_en="Chiihou", mjsoul_id=36, tenhou_id=38),
@@ -74,11 +66,10 @@ class YakuList:
         Yaku(name="大四喜", name_en="Dai Suusi", mjsoul_id=50, tenhou_id=49),
         Yaku(name="小四喜", name_en="Sho Suusi", mjsoul_id=43, tenhou_id=50),
         Yaku(name="四槓子", name_en="Su Kantsu", mjsoul_id=44, tenhou_id=51),
-
         # Extra
         Yaku(name="ドラ", name_en="Dora", mjsoul_id=31, tenhou_id=52),
         Yaku(name="赤ドラ", name_en="Aka Dora", mjsoul_id=32, tenhou_id=54),
-        Yaku(name="裏ドラ", name_en="Ura Dora", mjsoul_id=33, tenhou_id=52), # ドラと同じ
+        Yaku(name="裏ドラ", name_en="Ura Dora", mjsoul_id=33, tenhou_id=52),  # ドラと同じ
     ]
 
     @staticmethod
@@ -120,8 +111,8 @@ class Conditions:
     chankan: bool = False
     tsumo_first_turn: bool = False
 
-    player_wind: int | Wind = 0 # E,S,W,N = (0,1,2,3) or Wind enum values
-    round_wind: int | Wind = 0 # E,S,W,N = (0,1,2,3) or Wind enum values
+    player_wind: int | Wind = 0  # E,S,W,N = (0,1,2,3) or Wind enum values
+    round_wind: int | Wind = 0  # E,S,W,N = (0,1,2,3) or Wind enum values
 
     kyoutaku: int = 0
     tsumi: int = 0
@@ -136,19 +127,21 @@ class AgariCalculator:
             if isinstance(m, rust_core.Meld):
                 rust_melds.append(m)
                 continue
-            
+
             m_type = rust_core.MeldType.Chi
             if m.type == Meld.PON:
                 m_type = rust_core.MeldType.Peng
             elif m.type == Meld.KAN:
                 m_type = rust_core.MeldType.Gang if m.opened else rust_core.MeldType.Angang
-            
-            rust_melds.append(rust_core.Meld(
-                m_type,
-                m.tiles, # Pass 136-tile IDs
-                m.opened
-            ))
-            
+
+            rust_melds.append(
+                rust_core.Meld(
+                    m_type,
+                    m.tiles,  # Pass 136-tile IDs
+                    m.opened,
+                )
+            )
+
         self.calc_rust = rust_core.AgariCalculator(self.tiles_136, rust_melds)
         self._rust_melds = rust_melds
 
@@ -164,15 +157,15 @@ class AgariCalculator:
         num_kans = 0
         current_tiles_count = len(tiles)
         for m in melds:
-             current_tiles_count += len(m.tiles)
-             m_type = getattr(m, "meld_type", getattr(m, "type", None))
-             if m_type in [rust_core.MeldType.Gang, rust_core.MeldType.Angang, rust_core.MeldType.Addgang]:
-                 num_kans += 1
-                 
+            current_tiles_count += len(m.tiles)
+            m_type = getattr(m, "meld_type", getattr(m, "type", None))
+            if m_type in [rust_core.MeldType.Gang, rust_core.MeldType.Angang, rust_core.MeldType.Addgang]:
+                num_kans += 1
+
         expected_count = 13 + num_kans
         if current_tiles_count != expected_count:
-             raise ValueError(f"Hand must have {expected_count} tiles (got {current_tiles_count})")
-             
+            raise ValueError(f"Hand must have {expected_count} tiles (got {current_tiles_count})")
+
         tiles = list(tiles)
         tiles.sort()
         return AgariCalculator(tiles, melds)
@@ -186,9 +179,9 @@ class AgariCalculator:
         # For now, focus on closed tiles.
         # User requested full implementation.
         # I'll implement basic tile string construction.
-        
+
         result = self._tiles_to_string(tiles)
-        
+
         for meld in self.melds:
             # Reconstruct meld string
             # Format: (XYZCI) etc.
@@ -200,18 +193,23 @@ class AgariCalculator:
             # User sample: (p1z1).
             # I'll assume index 0 if unknown.
             result += self._meld_to_string(meld)
-            
+
         return result
 
     @staticmethod
-    def calc_from_text(hand_str_repr_with_win_tile: str, dora_indicators: str | None = None, conditions: Conditions = Conditions(), ura_indicators: str | None = None) -> Agari:
+    def calc_from_text(
+        hand_str_repr_with_win_tile: str,
+        dora_indicators: str | None = None,
+        conditions: Conditions = Conditions(),
+        ura_indicators: str | None = None,
+    ) -> Agari:
         """
         hand_str_repr_with_win_tile: str は 14 枚分の牌を想定する。最後の1枚を win_tile として扱う。
         """
         tiles, melds = rust_core.parse_hand(hand_str_repr_with_win_tile)
         if not tiles and not melds:
-             raise ValueError("Empty hand")
-             
+            raise ValueError("Empty hand")
+
         # If open hand, win tile is last added?
         # Assuming last tile in string is win tile.
         # Parser returns tiles relative to input order?
@@ -220,28 +218,28 @@ class AgariCalculator:
         # Win tile must be a closed tile? Or standard agari check assumes win tile is separate.
         # If Ron on Meld? That's not supported by `calc` interface usually (win_tile is passed separately).
         # Assuming win_tile is one of the standing tiles (or the drawn tile).
-        
+
         if not tiles:
-             raise ValueError("No standing tiles to check for win tile")
-             
+            raise ValueError("No standing tiles to check for win tile")
+
         win_tile = tiles[-1]
         tiles = list(tiles)
-        tiles.sort() # sort all tiles including win tile
-        
+        tiles.sort()  # sort all tiles including win tile
+
         calc = AgariCalculator(tiles, melds)
-        
+
         dora_inds = []
         if dora_indicators:
-             dora_inds, _ = rust_core.parse_hand(dora_indicators)
-             dora_inds = list(dora_inds)
-             dora_inds.sort()
-             
+            dora_inds, _ = rust_core.parse_hand(dora_indicators)
+            dora_inds = list(dora_inds)
+            dora_inds.sort()
+
         ura_inds = []
         if ura_indicators:
-             ura_inds, _ = rust_core.parse_hand(ura_indicators)
-             ura_inds = list(ura_inds)
-             ura_inds.sort()
-             
+            ura_inds, _ = rust_core.parse_hand(ura_indicators)
+            ura_inds = list(ura_inds)
+            ura_inds.sort()
+
         return calc.calc(win_tile, dora_inds, conditions, ura_inds)
 
     def _tiles_to_string(self, tiles: list[int]) -> str:
@@ -250,34 +248,40 @@ class AgariCalculator:
         pin = []
         sou = []
         honors = []
-        
+
         for t in tiles:
             is_red = t in [16, 52, 88]
             val = t // 4
-            
+
             digit = 0
-            block = None
             if val < 9:
                 digit = val + 1
-                if is_red: digit = 0
+                if is_red:
+                    digit = 0
                 man.append(digit)
             elif val < 18:
                 digit = (val - 9) + 1
-                if is_red: digit = 0
+                if is_red:
+                    digit = 0
                 pin.append(digit)
             elif val < 27:
                 digit = (val - 18) + 1
-                if is_red: digit = 0
+                if is_red:
+                    digit = 0
                 sou.append(digit)
             else:
                 digit = (val - 27) + 1
                 honors.append(digit)
-                
+
         res = ""
-        if man: res += "".join(map(str, man)) + "m"
-        if pin: res += "".join(map(str, pin)) + "p"
-        if sou: res += "".join(map(str, sou)) + "s"
-        if honors: res += "".join(map(str, honors)) + "z"
+        if man:
+            res += "".join(map(str, man)) + "m"
+        if pin:
+            res += "".join(map(str, pin)) + "p"
+        if sou:
+            res += "".join(map(str, sou)) + "s"
+        if honors:
+            res += "".join(map(str, honors)) + "z"
         return res
 
     def _meld_to_string(self, meld: Meld) -> str:
@@ -287,60 +291,83 @@ class AgariCalculator:
         # Determine suit from first tile.
         t0 = meld.tiles[0]
         val0 = t0 // 4
-        
-        suffix = 'm'
-        if val0 >= 9 and val0 < 18: suffix = 'p'
-        elif val0 >= 18 and val0 < 27: suffix = 's'
-        elif val0 >= 27: suffix = 'z'
-        
+
+        suffix = "m"
+        if val0 >= 9 and val0 < 18:
+            suffix = "p"
+        elif val0 >= 18 and val0 < 27:
+            suffix = "s"
+        elif val0 >= 27:
+            suffix = "z"
+
         m_type = getattr(meld, "meld_type", getattr(meld, "type", None))
 
         # Digits
         digits = ""
-        is_chi = (m_type == rust_core.MeldType.Chi)
-        
+        is_chi = m_type == rust_core.MeldType.Chi
+
         if is_chi:
             for t in meld.tiles:
-                 is_red = t in [16, 52, 88]
-                 v = t // 4
-                 
-                 d = 0
-                 if v < 9: d = v + 1
-                 elif v < 18: d = v - 9 + 1
-                 elif v < 27: d = v - 18 + 1
-                 else: d = v - 27 + 1
-                 
-                 if is_red: d = 0
-                 digits += str(d)
+                is_red = t in [16, 52, 88]
+                v = t // 4
+
+                d = 0
+                if v < 9:
+                    d = v + 1
+                elif v < 18:
+                    d = v - 9 + 1
+                elif v < 27:
+                    d = v - 18 + 1
+                else:
+                    d = v - 27 + 1
+
+                if is_red:
+                    d = 0
+                digits += str(d)
         else:
-             # Pon/Kan/Add: single digit
-             has_red = any(t in [16, 52, 88] for t in meld.tiles)
-             v = val0
-             d = 0
-             if v < 9: d = v + 1
-             elif v < 18: d = v - 9 + 1
-             elif v < 27: d = v - 18 + 1
-             else: d = v - 27 + 1
-             
-             if has_red: d = 0
-             digits = str(d)
-             
+            # Pon/Kan/Add: single digit
+            has_red = any(t in [16, 52, 88] for t in meld.tiles)
+            v = val0
+            d = 0
+            if v < 9:
+                d = v + 1
+            elif v < 18:
+                d = v - 9 + 1
+            elif v < 27:
+                d = v - 18 + 1
+            else:
+                d = v - 27 + 1
+
+            if has_red:
+                d = 0
+            digits = str(d)
+
         # Prefix
         prefix = ""
-        
-        if m_type == rust_core.MeldType.Peng: prefix = "p"
-        elif m_type == rust_core.MeldType.Gang: prefix = "k" # Daiminkan
-        elif m_type == rust_core.MeldType.Addgang: prefix = "s"
-        elif m_type == rust_core.MeldType.Angang: prefix = "k" # Closed Kan logic?
+
+        if m_type == rust_core.MeldType.Peng:
+            prefix = "p"
+        elif m_type == rust_core.MeldType.Gang:
+            prefix = "k"  # Daiminkan
+        elif m_type == rust_core.MeldType.Addgang:
+            prefix = "s"
+        elif m_type == rust_core.MeldType.Angang:
+            prefix = "k"  # Closed Kan logic?
         # Closed Kan also 'k'? Usually closed kan not indicated in open string?
         # But user example (k2z) was "closed kan or daiminkan".
         # If Angang, maybe suffix missing?
-        
-        # Call index? Not stored. Use 0.
-        
-        return f"({prefix}{digits}{suffix}0)" # Fake index 0
 
-    def calc(self, win_tile: int, dora_indicators: list[int] = None, conditions: Conditions = Conditions(), ura_indicators: list[int] = None) -> Agari:
+        # Call index? Not stored. Use 0.
+
+        return f"({prefix}{digits}{suffix}0)"  # Fake index 0
+
+    def calc(
+        self,
+        win_tile: int,
+        dora_indicators: list[int] = None,
+        conditions: Conditions = Conditions(),
+        ura_indicators: list[int] = None,
+    ) -> Agari:
         rust_conditions = rust_core.Conditions(
             tsumo=conditions.tsumo,
             riichi=conditions.riichi,
@@ -356,7 +383,7 @@ class AgariCalculator:
             kyoutaku=conditions.kyoutaku,
             tsumi=conditions.tsumi,
         )
-        
+
         dora_inds_136 = dora_indicators if dora_indicators else []
         ura_inds_136 = ura_indicators if ura_indicators else []
 
@@ -366,19 +393,19 @@ class AgariCalculator:
         rust_melds = self._rust_melds
         # All melds (including Kans) count as 3 tiles for sizing purposes
         total_tiles = len(self.tiles_136) + len(rust_melds) * 3
-            
+
         calc_obj = self.calc_rust
         if total_tiles % 3 == 1:
             # 13 tiles -> Add win_tile to standing tiles
             temp_tiles = sorted(self.tiles_136 + [win_tile])
             # Recreate calculator with 14 tiles
             calc_obj = rust_core.AgariCalculator(temp_tiles, rust_melds)
-        
+
         res = calc_obj.calc(win_tile, dora_inds_136, ura_inds_136, rust_conditions)
-        
+
         if not res.agari:
             return Agari(agari=False)
-        
+
         # Rust core now returns MJSoul IDs directly
         mjsoul_yaku = res.yaku
 

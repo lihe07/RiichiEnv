@@ -10,13 +10,13 @@ repos:
     hooks:
       - id: rustfmt
         name: rustfmt
-        entry: bash -c 'cd riichienv && cargo fmt --all -- --check'
+        entry: cargo fmt --manifest-path riichienv/Cargo.toml --all -- --check
         language: system
         types: [rust]
         pass_filenames: false
       - id: clippy
         name: clippy
-        entry: bash -c 'cd riichienv && PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 cargo clippy --all-targets --all-features -- -D warnings'
+        entry: env PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 cargo clippy --manifest-path riichienv/Cargo.toml --all-targets --all-features -- -D warnings
         language: system
         types: [rust]
         pass_filenames: false

@@ -1,5 +1,7 @@
 import pytest
-from riichienv import RiichiEnv, GameType, Action, ActionType
+
+from riichienv import GameType, RiichiEnv
+
 
 class TestGameModes:
     def test_unsupported_game_type(self):
@@ -11,33 +13,32 @@ class TestGameModes:
         custom_scores = [30000, 30000, 30000, 30000]
         env = RiichiEnv(
             game_type=GameType.YON_IKKYOKU,
-            round_wind=0, # East,
+            round_wind=0,  # East,
             initial_scores=custom_scores,
             kyotaku=1,
-            honba=2
+            honba=2,
         )
         env.reset()
-        
+
         # Check internal state
         assert env.scores == custom_scores
         assert env.riichi_sticks == 1
         assert env.game_type == GameType.YON_IKKYOKU
-        
+
         # Check start_kyoku event
-        start_kyoku = env.mjai_log[1] # 0 is start_game, 1 is start_kyoku
+        start_kyoku = env.mjai_log[1]  # 0 is start_game, 1 is start_kyoku
         assert start_kyoku["type"] == "start_kyoku"
         assert start_kyoku["bakaze"] == "E"
         assert start_kyoku["honba"] == 2
         assert start_kyoku["kyotaku"] == 1
-        
+
     def test_south_round_wind(self):
         # South Round
         env = RiichiEnv(
             game_type=GameType.YON_IKKYOKU,
-            round_wind=1 # South
+            round_wind=1,  # South
         )
         env.reset()
-        
+
         start_kyoku = env.mjai_log[1]
         assert start_kyoku["bakaze"] == "S"
-
