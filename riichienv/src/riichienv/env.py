@@ -623,8 +623,10 @@ class RiichiEnv:
             if t in hand:
                 hand.remove(t)
             else:
-                # Should not happen if confirmed legal
-                pass
+                raise ValueError(
+                    f"Tile {t} not found in player {pid}'s hand during claim execution; "
+                    f"consume_tiles={consume}, hand={hand}"
+                )
 
         # 2. Create Meld
         target_tile = action.tile
