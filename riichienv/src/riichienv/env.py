@@ -120,8 +120,9 @@ class RiichiEnv:
         
         # Phases
         self.phase: Phase = Phase.WAIT_ACT
-        self.actionable_players: List[int] = [0] # Initially 0
+        self.active_players: List[int] = [0] # Initially 0
         self.last_discard: Dict[str, Any] = None # {seat, tile_136}
+
         self.current_claims: Dict[int, List[Action]] = {} # Potential claims for current discard
         
         # Security
@@ -172,8 +173,9 @@ class RiichiEnv:
         self.turn_count = 0
         self.current_player = 0 # Dealer = 0 (East)
         self.phase = Phase.WAIT_ACT
-        self.actionable_players = [0]
+        self.active_players = [0]
         self.current_claims = {}
+
         self.last_discard = None
         self.melds = {0: [], 1: [], 2: [], 3: []}
 
@@ -221,7 +223,8 @@ class RiichiEnv:
 
         # Check Tsumo logic...
         
-        return self._get_observations(self.actionable_players) # Start state
+        return self._get_observations(self.active_players) # Start state
+
 
     def step(self, actions: Dict[int, Action]) -> Dict[int, Observation]:
         """
@@ -231,6 +234,14 @@ class RiichiEnv:
         if self.is_done:
             return self._get_observations([])
             
+        # Validation: keys of actions must match self.active_players
+        # Note: We need to handle set comparison because order might differ in dict (though usually not an issue)
+        required_players = set(self.active_players)
+        provided_players = set(actions.keys())
+        if required_players != provided_players:
+             raise ValueError(f"Actions required from {self.active_players}, but got {list(actions.keys())}")
+
+
         # Convert raw dict/int to Action objects if needed
         # Assuming actions is {pid: Action object} or {pid: legacy_int}
         
@@ -240,9 +251,10 @@ class RiichiEnv:
             action_raw = actions.get(self.current_player)
             if action_raw is None:
                 # Should not happen if correctly used
-                return self._get_observations(self.actionable_players)
+                return self._get_observations(self.active_players)
                 
             action: Action = action_raw
+
             
             discard_tile_id = -1
             
@@ -354,10 +366,11 @@ class RiichiEnv:
 
             if self.current_claims:
                  self.phase = Phase.WAIT_RESPONSE
-                 self.actionable_players = list(self.current_claims.keys())
-                 self.actionable_players.sort() # generic order
+                 self.active_players = list(self.current_claims.keys())
+                 self.active_players.sort() # generic order
                  
-                 return self._get_observations(self.actionable_players)
+                 return self._get_observations(self.active_players)
+
                  
             # If no response needed -> Next
             self.current_player = (self.current_player + 1) % 4
@@ -378,9 +391,10 @@ class RiichiEnv:
             self.mjai_log.append(tsumo_event)
 
             self.phase = Phase.WAIT_ACT
-            self.actionable_players = [self.current_player]
+            self.active_players = [self.current_player]
             
-            return self._get_observations(self.actionable_players)
+            return self._get_observations(self.active_players)
+
 
         # PHASE: WAIT_RESPONSE
         elif self.phase == Phase.WAIT_RESPONSE:
@@ -388,8 +402,9 @@ class RiichiEnv:
             # Collect valid actions
             valid_actions = {} # pid -> Action
             
-            for pid in self.actionable_players:
+            for pid in self.active_players:
                 act = actions.get(pid)
+
                 if act and isinstance(act, Action):
                     # Validate against legal (or current_claims)
                     # For simplicity, check type
@@ -453,10 +468,11 @@ class RiichiEnv:
                 # Turn moves to claimer
                 self.current_player = claimer
                 self.phase = Phase.WAIT_ACT # Must discard next
-                self.actionable_players = [self.current_player]
+                self.active_players = [self.current_player]
                 self.drawn_tile = None # No draw after call (except some Kan...)
                 
-                return self._get_observations(self.actionable_players)
+                return self._get_observations(self.active_players)
+
 
             # 3. Check Chi
             chiers = [pid for pid, a in valid_actions.items() if a.type == ActionType.CHI]

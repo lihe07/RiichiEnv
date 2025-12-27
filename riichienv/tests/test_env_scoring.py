@@ -49,7 +49,9 @@ class TestRiichiScoring:
         # Set phase WAIT_ACT
         env.current_player = 1
         env.phase = 0 # WAIT_ACT
+        env.active_players = [1]
         env.hands[1].append(126) # Give P1 the target tile
+
         
         # P1 discards 126
         obs = env.step({1: Action(ActionType.DISCARD, tile=126)})

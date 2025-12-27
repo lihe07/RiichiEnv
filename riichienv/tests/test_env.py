@@ -152,8 +152,9 @@ class TestRiichiEnv:
         # P1 hand: has 1m pair (1, 2)
         env.hands[1] = [1, 2, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45]
         env.hands[1].sort()
-        env.actionable_players = [0]
+        env.active_players = [0]
         env.current_player = 0
+
         env.drawn_tile = 52 # 5p (irrelevant)
         
         # P0 discards 1m (ID 0)
@@ -165,7 +166,8 @@ class TestRiichiEnv:
         assert env.phase == 1 # Phase.WAIT_RESPONSE, currently checks Ron.
         # This assertion expects Pon support.
         
-        assert 1 in env.actionable_players
+        assert 1 in env.active_players
+
         
         # P1 Legal actions Check
         obs = env._get_observations([1])[1]
@@ -204,8 +206,9 @@ class TestRiichiEnv:
         env.hands[1] = [tile_4m, tile_5m] + list(range(60, 60+11))
         env.hands[1].sort()
         
-        env.actionable_players = [0]
+        env.active_players = [0]
         env.current_player = 0
+
         env.drawn_tile = 100 # irrelevant
         
         # P0 Discards 3m
@@ -214,7 +217,8 @@ class TestRiichiEnv:
         # Should be in WAIT_RESPONSE
         # P1 is next player (0->1 is Chi valid)
         assert env.phase == 1
-        assert 1 in env.actionable_players
+        assert 1 in env.active_players
+
         
         # P1 Checks Legal
         obs = env._get_observations([1])[1]
@@ -243,18 +247,21 @@ class TestRiichiEnv:
         # 1m,1m,1m (0,1,2), 2m,2m,2m (4,5,6), 3m,3m,3m (8,9,10), 4m,4m,4m (12,13,14), 5m (16)
         # Wait 5m.
         p1_hand = [0,1,2, 4,5,6, 8,9,10, 12,13,14, 16]
+        p1_hand = [0,1,2, 4,5,6, 8,9,10, 12,13,14, 16]
         env.hands[1] = p1_hand
         
-        env.actionable_players = [0]
+        env.active_players = [0]
         env.current_player = 0
         
         # P0 Discards 5m (ID 17, matches pair for 5m)
+
         tile_5m_target = 17
         
         env.step({0: Action(ActionType.DISCARD, tile=tile_5m_target)})
         
         assert env.phase == 1
-        assert 1 in env.actionable_players
+        assert 1 in env.active_players
+
         
         # P1 Legal Ron
         obs = env._get_observations([1])[1]
