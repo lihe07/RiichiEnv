@@ -133,6 +133,10 @@ class RiichiEnv:
         self.last_discard: dict[str, Any] | None = None  # {seat, tile_136}
 
         self.current_claims: dict[int, list[Action]] = {}  # Potential claims for current discard
+        
+        # Round State
+        self.oya: int = 0
+        self.dora_indicators: list[int] = []
 
         # Security
         self.wall_digest: str = ""
@@ -146,8 +150,11 @@ class RiichiEnv:
         # Current logic state
         self.drawn_tile: int | None = None  # The tile currently drawn by current_player
 
-    def reset(self) -> dict[int, Observation]:
+    def reset(self, oya: int = 0, dora_indicators: list[int] | None = None) -> dict[int, Observation]:
         self._rng = random.Random(self._seed)  # Reset RNG if seed was fixed? Or continue? Usually new seed or continue.
+        
+        self.oya = oya
+        self.dora_indicators = dora_indicators if dora_indicators is not None else []
         # If seed was None, random.Random(None) uses system time.
 
         # Initialize tiles: 136 tiles
@@ -348,6 +355,12 @@ class RiichiEnv:
 
             elif action.type in [ActionType.ANKAN, ActionType.KAKAN]:
                  # Handle self-kan
+                 # Ensure drawn_tile is in hand so _execute_claim can find it
+                 if self.drawn_tile is not None:
+                     self.hands[self.current_player].append(self.drawn_tile)
+                     self.drawn_tile = None
+                     self.hands[self.current_player].sort()
+
                  self._execute_claim(self.current_player, action)
                  
                  if not self.wall:
@@ -499,8 +512,20 @@ class RiichiEnv:
                 if pid == self.current_player:
                     continue
                 # Calc Ron
+                # player_wind: (pid - oya + 4) % 4
+                p_wind = (pid - self.oya + 4) % 4
+                is_houtei = (not self.wall) # Win on discard when wall is empty
+                
                 res = AgariCalculator(self.hands[pid], self.melds.get(pid, [])).calc(
-                    discard_tile_id, conditions=Conditions(tsumo=False)
+                    discard_tile_id, 
+                    dora_indicators=self.dora_indicators,
+                    conditions=Conditions(
+                        tsumo=False,
+                        riichi=self.riichi_declared[pid],
+                        player_wind=p_wind,
+                        round_wind=self._custom_round_wind,
+                        houtei=is_houtei,
+                    )
                 )
                 if res.agari:
                     ron_potential.append(pid)
@@ -886,6 +911,10 @@ class RiichiEnv:
 
     def _execute_claim(self, pid: int, action: Action):
         """Executes a claim action (PON, CHI, KAN)"""
+        if action.type == ActionType.ANKAN:
+             print(f"[ENV_DEBUG] _execute_claim ANKAN pid={pid} consume={action.consume_tiles}")
+             print(f"[ENV_DEBUG] hand_before={self.hands[pid]}")
+
         # 1. Remove tiles from hand
         hand = self.hands[pid]
         consume = action.consume_tiles
@@ -897,6 +926,9 @@ class RiichiEnv:
                     f"Tile {t} not found in player {pid}'s hand during claim execution; "
                     f"consume_tiles={consume}, hand={hand}"
                 )
+        
+        if action.type == ActionType.ANKAN:
+             print(f"[ENV_DEBUG] hand_after={self.hands[pid]}")
 
         # 2. Create Meld
         target_tile = action.tile
@@ -949,7 +981,8 @@ class RiichiEnv:
             if found_idx != -1:
                 old_meld = self.melds[pid].pop(found_idx)
                 # New tiles = old tiles + added tile
-                tiles = sorted(old_meld.tiles + [target_tile])
+                old_tiles = list(old_meld.tiles) if isinstance(old_meld.tiles, (bytes, bytearray)) else old_meld.tiles
+                tiles = sorted(old_tiles + [target_tile])
             else:
                  # Failed to find Pon? Should not happen if Kakan is legal.
                  # Fallback: Just create a Gang meld?
@@ -1090,7 +1123,7 @@ class RiichiEnv:
             # If Oya wins, `tsumo_agari_oya` is likely the payment per person.
             # If Ko wins, `tsumo_agari_oya` is payment by Oya, `tsumo_agari_ko` is payment by Ko.
 
-            if winner == 0:  # Dealer (in this simplified kyoku=1, oya=0 env)
+            if winner == self.oya:  # Dealer
                 # Dealer Tsumo
                 # Based on verification: tsumo_agari_ko holds the payment amount for Kids.
                 # tsumo_agari_oya is 0 because there is no Oya to pay.

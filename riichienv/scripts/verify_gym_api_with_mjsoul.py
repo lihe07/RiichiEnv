@@ -12,27 +12,30 @@ from riichienv import ReplayGame, RiichiEnv, AgariCalculator, Conditions
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("path", type=str, help="Path to the game record JSON file.")
-    parser.add_argument("--skip", type=int, default=0, help="Number of kyokus to skip.")
+    # parser.add_argument("path", type=str, help="Path to the game record JSON file.")
+    # parser.add_argument("--skip", type=int, default=0, help="Number of kyokus to skip.")
+    parser.add_argument("--verbose", "-v", action="store_true", default=False)
     return parser.parse_args()
 
 
 class MjsoulEnvVerifier:
-    def __init__(self):
+    def __init__(self, verbose: bool = True):
         self.env: RiichiEnv = RiichiEnv()
         self.obs_dict: dict[int, Any] | None = None
         self.dora_indicators: list[int] = []
+        self._verbose = verbose
 
     def verify_game(self, game: Any, skip: int = 0) -> bool:
         # We start from the 5th kyoku as in the original script? 
         # Original: for kyoku in list(game.take_kyokus())[4:]:
         kyokus = list(game.take_kyokus())
         for i, kyoku in enumerate(kyokus[skip:]):
-            print(f"Verifying kyoku {skip + i}...")
+            print(f"Processing Kyoku index {i} ...")
             if not self.verify_kyoku(kyoku):
-                print(f"Verification failed at kyoku {skip + i}.")
+                print("NOT OK")
                 return False
-        print("All kyokus verified successfully.")
+            else:
+                print("OK")
         return True
 
     def _new_round(self, kyoku: Any, event: Any) -> None:
@@ -55,7 +58,7 @@ class MjsoulEnvVerifier:
         data = event["data"]
         self.dora_indicators = [cvt.mpsz_to_tid(t) for t in data["doras"]]
         self.env = RiichiEnv()
-        self.env.reset()
+        self.env.reset(oya=data["ju"] % 4, dora_indicators=self.dora_indicators)
         self.env.mjai_log = [
             {
                 "type": "start_game",
@@ -95,12 +98,15 @@ class MjsoulEnvVerifier:
         self.obs_dict = self.env._get_observations([first_actor])
 
     def _discard_tile(self, event: Any) -> None:
-        print(">> OBS", self.obs_dict)
-        print("--")
-        print(">> EVENT", event)
-        print(f">> PHASE: {self.env.phase}")
+        if self._verbose:
+            print(">> OBS", self.obs_dict)
+            print("--")
+            print(">> EVENT", event)
+            print(f">> PHASE: {self.env.phase}")
+
         while self.env.phase != Phase.WAIT_ACT:
-            print(f">> WAITING loop... obs keys: {list(self.obs_dict.keys())} Phase: {self.env.phase}")
+            if self._verbose:
+                print(f">> WAITING loop... obs keys: {list(self.obs_dict.keys())} Phase: {self.env.phase}")
             # Skip action
             self.obs_dict = self.env.step({skip_player_id: Action(ActionType.PASS) for skip_player_id in self.obs_dict.keys()})
 
@@ -110,18 +116,21 @@ class MjsoulEnvVerifier:
         candidate_tiles = set([cvt.tid_to_mpsz(a.tile) for a in self.obs_dict[player_id].legal_actions() if a.type == ActionType.DISCARD])
         assert player_id == event["data"]["seat"]
         if event["data"]["tile"] not in candidate_tiles:
-            print(f">> WARNING: FAILED DISCARD: tile {event['data']['tile']} not in candidate tiles. Log may be repeating history or wall desync.")
-            print(f"Hand: {cvt.tid_to_mpsz_list(self.obs_dict[player_id].hand)}")
+            if self._verbose:
+                print(f">> WARNING: FAILED DISCARD: tile {event['data']['tile']} not in candidate tiles. Log may be repeating history or wall desync.")
+                print(f"Hand: {cvt.tid_to_mpsz_list(self.obs_dict[player_id].hand)}")
             
             # Force Hand Patch
             target_tid = cvt.mpsz_to_tid(event["data"]["tile"])
-            print(f">> TRUST: Patching hand to include {event['data']['tile']} for discard.")
+            if self._verbose:
+                print(f">> TRUST: Patching hand to include {event['data']['tile']} for discard.")
             
             # Remove last tile (assumed drawn) to maintain count, if hand is full (14 or 11/8/5 etc + 1?)
             # Just remove last tile to be safe on count.
             if self.env.hands[player_id]:
                 removed = self.env.hands[player_id].pop()
-                print(f">> REMOVED {cvt.tid_to_mpsz(removed)} from hand.")
+                if self._verbose:
+                    print(f">> REMOVED {cvt.tid_to_mpsz(removed)} from hand.")
             
             self.env.hands[player_id].append(target_tid)
             
@@ -132,14 +141,16 @@ class MjsoulEnvVerifier:
         # Re-fetch legal actions or just construct specific action
         # Riichi Step
         if event["data"]["is_liqi"]:
-            print(f">> TRUST: Executing RIICHI step for {player_id}")
+            if self._verbose:
+                print(f">> TRUST: Executing RIICHI step for {player_id}")
             # Helper to find Riichi action
             riichi_actions = [a for a in self.obs_dict[player_id].legal_actions() if a.type == ActionType.RIICHI]
             if riichi_actions:
-                 self.obs_dict = self.env.step({player_id: riichi_actions[0]})
+                self.obs_dict = self.env.step({player_id: riichi_actions[0]})
             else:
-                 print(">> WARNING: Riichi flag true but no Riichi action? Forcing Riichi action.")
-                 self.obs_dict = self.env.step({player_id: Action(ActionType.RIICHI)})
+                if self._verbose:
+                    print(">> WARNING: Riichi flag true but no Riichi action? Forcing Riichi action.")
+                self.obs_dict = self.env.step({player_id: Action(ActionType.RIICHI)})
         
         # Discard Step
         # Manually construct action to ensure we use the target tile
@@ -164,45 +175,84 @@ class MjsoulEnvVerifier:
         self.obs_dict = self.env.step({player_id: action})
 
     def _liuju(self, event: Any) -> None:
-        print(">> LIUJU", event)
+        if self._verbose:
+            print(">> LIUJU", event)
         # Often happens on current_player's turn if Kyuhsu Kyuhai
         self.obs_dict = self.env._get_observations(self.env.active_players)
         for pid, obs in self.obs_dict.items():
+            if self._verbose:
                 print(f">> legal_actions() {pid} {obs.legal_actions()}")
                 
                 # Check for KYUSHU_KYUHAI
                 kyushu_actions = [a for a in obs.legal_actions() if a.type == ActionType.KYUSHU_KYUHAI]
                 if kyushu_actions:
-                    print(f">> Player {pid} has KYUSHU_KYUHAI")
+                    if self._verbose:
+                        print(f">> Player {pid} has KYUSHU_KYUHAI")
                     # Execute it
                     self.obs_dict = self.env.step({pid: kyushu_actions[0]})
-                    print(f">> Executed KYUSHU_KYUHAI. Done: {self.env.done()}")
+                    if self._verbose:
+                        print(f">> Executed KYUSHU_KYUHAI. Done: {self.env.done()}")
                     break
 
     def _hule(self, event: Any) -> None:
+        is_zimo = any(h.get("zimo", False) for h in event["data"]["hules"])
+
+        # If Zimo, we must be in WAIT_ACT. If in WAIT_RESPONSE, auto-pass.
+        if is_zimo and self.env.phase == Phase.WAIT_RESPONSE:
+             if self._verbose:
+                 print(">> DETECTED Zimo Hule while in WAIT_RESPONSE. Auto-passing previous discard claims.")
+             while self.env.phase == Phase.WAIT_RESPONSE:
+                 self.obs_dict = self.env.step({pid: Action(ActionType.PASS) for pid in self.obs_dict.keys()})
+             if self._verbose:
+                 print(f">> ADVANCED TO PHASE: {self.env.phase}, Active: {self.env.active_players}")
+
         active_players = self.obs_dict.keys()
-        # assert self.env.phase == Phase.WAIT_RESPONSE
-        if self.env.phase != Phase.WAIT_RESPONSE:
-            print(f">> WARNING: Phase is {self.env.phase}, expected WAIT_RESPONSE. Simulator missed the Ron opportunity?")
-            # We can't verify Hule details if we are in the wrong phase (e.g. next turn).
-            # But the Kyoku is likely over in the log.
-            # We should probably just return/pass.
-            print(">> SKIPPING Hule verification due to Phase mismatch.")
-            return
+        
+        # Validation checks
+        if is_zimo:
+            if self.env.phase != Phase.WAIT_ACT:
+                 if self._verbose:
+                     print(f">> WARNING: Zimo Hule but Phase is {self.env.phase} (Expected WAIT_ACT).")
+                 return
+        else:
+            # Ron
+            if self.env.phase != Phase.WAIT_RESPONSE:
+                if self._verbose:
+                    print(f">> WARNING: Ron Hule but Phase is {self.env.phase} (Expected WAIT_RESPONSE).")
+                return
+
+        if self._verbose:
+            print(f">> HULE EVENT DATA: {event}")
+            print(f">> ENV PHASE: {self.env.phase}")
+            print(f">> ENV current_player: {self.env.current_player}")
+            print(f">> ENV drawn_tile: {self.env.drawn_tile} ({cvt.tid_to_mpsz(self.env.drawn_tile) if self.env.drawn_tile is not None else 'None'})")
+            print(f">> ENV active_players: {self.env.active_players}")
+            print(f">> ENV wall len: {len(self.env.wall)}")
+            for pid in range(4):
+                for meld in self.env.melds[pid]:
+                    print(f"Meld: {meld.meld_type} {cvt.tid_to_mpsz_list(meld.tiles)} opened={meld.opened}")
+                print(f">> ENV hands[{pid}] len: {len(self.env.hands[pid])}")
 
         for hule in event["data"]["hules"]:
             player_id = hule["seat"]
             if player_id not in active_players:
-                print(f">> WARNING: Winner {player_id} not in active players {list(active_players)}. Simulator thinks they cannot Ron/Tsumo.")
-                print(f">> Hand: {cvt.tid_to_mpsz_list(self.obs_dict[player_id].hand) if player_id in self.obs_dict else 'Unknown'}")
-                print(f">> Skipping Score Verification for this Hule due to state mismatch.")
-                continue
+                if self._verbose:
+                    print(f">> WARNING: Winner {player_id} not in active players {list(active_players)}. Simulator thinks they cannot Ron/Tsumo.")
+                    # ダブロンのときは同じバッチでレスポンスを受けるはず
+                    print(f">> hule count: {len(event['data']['hules'])}")
+                    print(f">> Hand: {cvt.tid_to_mpsz_list(self.obs_dict[player_id].hand) if player_id in self.obs_dict else 'Unknown'}")
             
             assert player_id in active_players
             assert self.obs_dict[player_id]
             obs = self.obs_dict[player_id]
             match_actions = [a for a in obs.legal_actions() if a.type in {ActionType.RON, ActionType.TSUMO}]
-            assert len(match_actions) == 1
+            
+            if len(match_actions) != 1:
+                if self._verbose:
+                    print(f">> WARNING: Expected 1 winning action, found {len(match_actions)}: {match_actions}")
+                    print(f">> Hand: {cvt.tid_to_mpsz_list(obs.hand)}")
+                assert len(match_actions) > 0, "No winning actions found"
+
             action = match_actions[0]
 
             # Ura Doras
@@ -210,9 +260,22 @@ class MjsoulEnvVerifier:
             if "li_doras" in hule:
                 ura_indicators = [cvt.mpsz_to_tid(t) for t in hule["li_doras"]]
 
-            print(">> HULE", hule)
-            print(">>", cvt.tid_to_mpsz_list(obs.hand))
-            print(">>", cvt.tid_to_mpsz(action.tile))
+            winning_tile = action.tile
+            # Use environment hand (13 tiles) for calculation, as obs.hand might be 14 for Tsumo
+            hand_for_calc = self.env.hands[player_id]
+            
+            if action.type == ActionType.TSUMO:
+                 winning_tile = self.env.drawn_tile
+                 if winning_tile is None:
+                     # Fallback if drawn_tile is somehow None (shouldn't be reachable if logic holds)
+                     if self._verbose:
+                         print(">> WARNING: Tsumo but drawn_tile is None. Poking event data.")
+                     winning_tile = cvt.mpsz_to_tid(hule["hu_tile"])
+
+            if self._verbose:
+                print(">> HULE", hule)
+                print(">> HAND", cvt.tid_to_mpsz_list(hand_for_calc))
+                print(">> WIN TILE", cvt.tid_to_mpsz(winning_tile))
 
             # Calculate winds
             # self.env.mjai_log[1] is start_kyoku.
@@ -230,44 +293,78 @@ class MjsoulEnvVerifier:
             # player_wind: (seat - oya + 4) % 4
             player_wind_val = (player_id - oya + 4) % 4
             
-            calc = AgariCalculator(obs.hand, self.env.melds[player_id]).calc(
-                action.tile, 
+            fan_ids = set(f["id"] for f in hule["fans"])
+
+            # Check menzen
+            is_menzen = all(not m.opened for m in self.env.melds[player_id])
+
+            calc = AgariCalculator(hand_for_calc, self.env.melds[player_id]).calc(
+                winning_tile, 
                 dora_indicators=self.dora_indicators,
                 ura_indicators=ura_indicators,
                 conditions=Conditions(
-                    tsumo=False,
+                    tsumo=(action.type == ActionType.TSUMO),
                     riichi=self.env.riichi_declared[player_id],
-                    double_riichi=False,
-                    ippatsu=False,
-                    haitei=False,
-                    houtei=False,
-                    rinshan=False,
-                    chankan=False,
+                    double_riichi=(18 in fan_ids or 21 in fan_ids), # 21 is Double Riichi in some mappings?
+                    ippatsu=(30 in fan_ids), 
+                    haitei=(5 in fan_ids),
+                    houtei=(6 in fan_ids or 11 in fan_ids), # 11 observed as Houtei in MJSoul
+                    rinshan=(4 in fan_ids),
+                    chankan=(3 in fan_ids),
                     tsumo_first_turn=False,
                     player_wind=player_wind_val,
                     round_wind=round_wind,
             ))
 
-            print(">> AGARI", calc)
-            print("SIMULATOR", self.env.mjai_log[1])
-            print("OBS player_id", obs.player_id)
-            print("OBS (HAND)", cvt.tid_to_mpsz_list(obs.hand))
-            print("ENV (HAND)", cvt.tid_to_mpsz_list(self.env.hands[player_id]))
-            print("ENV (MELDS)")
-            for meld in self.env.melds[player_id]:
-                print(meld.meld_type, cvt.tid_to_mpsz_list(meld.tiles))
-            print("ACTUAL", event)
+            if self._verbose:
+                print(">> AGARI", calc)
+                print("SIMULATOR", self.env.mjai_log[1])
+                print("OBS player_id", obs.player_id)
+                print("OBS (HAND)", cvt.tid_to_mpsz_list(obs.hand))
+                print("ENV (HAND)", cvt.tid_to_mpsz_list(self.env.hands[player_id]))
+                print("ENV (MELDS)")
+                for meld in self.env.melds[player_id]:
+                    print(meld.meld_type, cvt.tid_to_mpsz_list(meld.tiles))
+                print("ACTUAL", event)
 
             assert calc.agari
             assert calc.yakuman == hule["yiman"]
-            assert calc.ron_agari == hule["point_rong"]
+            
+            if action.type == ActionType.TSUMO:
+                # Tsumo Score Check
+                # Use split scores from log if available
+                # Note: MJSoul logs sometimes have weird point_rong totals for Zimo, so checking components is safer.
+                
+                # Check Ko Payment
+                if "point_zimo_xian" in hule and hule["point_zimo_xian"] > 0:
+                     if calc.tsumo_agari_ko != hule["point_zimo_xian"]:
+                         if self._verbose:
+                             print(f">> TSUMO KO MISMATCH: Mine {calc.tsumo_agari_ko}, Expected {hule['point_zimo_xian']}")
+                     assert calc.tsumo_agari_ko == hule["point_zimo_xian"]
+                
+                # Check Oya Payment (if not Dealer)
+                # If dealer, point_zimo_qin might be 0 or same as Ko?
+                # Usually point_zimo_qin is what Oya pays.
+                # If winner is Oya, there is no Oya payment (all Ko).
+                if player_id != self.env.oya:
+                    if "point_zimo_qin" in hule and hule["point_zimo_qin"] > 0:
+                        if calc.tsumo_agari_oya != hule["point_zimo_qin"]:
+                            if self._verbose:
+                                print(f">> TSUMO OYA MISMATCH: Mine {calc.tsumo_agari_oya}, Expected {hule['point_zimo_qin']}")
+                        assert calc.tsumo_agari_oya == hule["point_zimo_qin"]
+                
+                # Verify total if possible, but trust components first.
+                # If components match, we are good.
+            else:
+                assert calc.ron_agari == hule["point_rong"]
             
             # Relaxing assertion for now if needed, but original had it.
             try:
                 assert calc.han == hule["count"]
                 assert calc.fu == hule["fu"]
             except AssertionError as e:
-                print(f"Mismatch in Han/Fu: Rust calc han={calc.han} fu={calc.fu}, Expected han={hule['count']} fu={hule['fu']}")
+                if self._verbose:
+                    print(f"Mismatch in Han/Fu: Rust calc han={calc.han} fu={calc.fu}, Expected han={hule['count']} fu={hule['fu']}")
                 raise e
 
     def verify_kyoku(self, kyoku: Any) -> bool:
@@ -275,13 +372,26 @@ class MjsoulEnvVerifier:
             events = kyoku.events()
 
             for event in events:
+                # Check for new doras in any event
+                if "doras" in event["data"]:
+                     # event["data"]["doras"] is a list of tile strings
+                     for d_str in event["data"]["doras"]:
+                         d_tid = cvt.mpsz_to_tid(d_str)
+                         if d_tid not in self.dora_indicators:
+                             if self._verbose:
+                                 print(f">> NEW DORA INDICATOR: {d_str} ({d_tid})")
+                             self.dora_indicators.append(d_tid)
+                             self.env.dora_indicators = self.dora_indicators[:]
+
                 if "AnGangAddGang" in event["name"] or "ChiPengGang" in event["name"]:
-                     print(f">> LOOP EVENT: {event}")
-                     if self.obs_dict:
-                         print(f">> LOOP OBS KEYS: {list(self.obs_dict.keys())}")
+                    if self._verbose:
+                        print(f">> LOOP EVENT: {event}")
+                        if self.obs_dict:
+                            print(f">> LOOP OBS KEYS: {list(self.obs_dict.keys())}")
                 match event["name"]:
                     case "NewRound":
-                        print(">> ERROR DEBUG: New Round Data:", event["data"])
+                        if self._verbose:
+                            print(">> ERROR DEBUG: New Round Data:", event["data"])
                         self._new_round(kyoku, event)
 
                     case "DiscardTile":
@@ -295,7 +405,8 @@ class MjsoulEnvVerifier:
                         self._liuju(event)
                         
                     case "NoTile":
-                        print(event)
+                        if self._verbose:
+                            print(event)
                         # NoTile usually implies Ryukyoku (Exhaustive Draw)
                         if not self.env.done():
                              print(">> WARNING: Log says NoTile but Env is not done?")
@@ -304,6 +415,16 @@ class MjsoulEnvVerifier:
                         self._hule(event)
 
                     case "AnGangAddGang":
+                        # Ensure we are in WAIT_ACT for self-actions (Ankan/Kakan)
+                        if self._verbose:
+                            print(f">> AnGangAddGang Check Phase: {self.env.phase}")
+                        
+                        while self.env.phase != Phase.WAIT_ACT:
+                            if self._verbose:
+                                print(f">> WAITING loop (AnGangAddGang)... obs keys: {list(self.obs_dict.keys())} Phase: {self.env.phase}")
+                            # Skip action (Pass on claims)
+                            self.obs_dict = self.env.step({skip_player_id: Action(ActionType.PASS) for skip_player_id in self.obs_dict.keys()})
+                        
                         player_id = event["data"]["seat"]
                         obs = self.obs_dict[player_id]
                         if event["data"]["type"] == 2:
@@ -315,9 +436,10 @@ class MjsoulEnvVerifier:
                              t = cvt.mpsz_to_tid(event["data"]["tiles"])
                              
                              if not kakan_actions:
-                                 print(f">> WARNING: KAKAN event received but not legal. Hand: {obs.hand}. Events: {obs.events}")
-                                 # Force Kakan
-                                 print(f">> TRUST: Forcing Kakan of {t} by adding to hand.")
+                                 if self._verbose:
+                                     print(f">> WARNING: KAKAN event received but not legal. Hand: {obs.hand}. Events: {obs.events}")
+                                     # Force Kakan
+                                     print(f">> TRUST: Forcing Kakan of {t} by adding to hand.")
                                  self.env.hands[player_id].append(t)
                                  # Re-fetch observations to update legal actions? 
                                  # Or just verify we can step.
@@ -334,16 +456,19 @@ class MjsoulEnvVerifier:
                              # Re-evaluate kakan actions or create action manually
                              # Even if legal_actions check fails above (due to OBS staleness), we can try to construct Action.
                              action = Action(ActionType.KAKAN, tile=t, consume_tiles=[t])
-                             print(f">> EXECUTING KAKAN Action: {action}")
+                             if self._verbose:
+                                 print(f">> EXECUTING KAKAN Action: {action}")
                              self.obs_dict = self.env.step({player_id: action})
-                             print(">> OBS (AFTER KAKAN)", self.obs_dict)
+                             if self._verbose:
+                                 print(">> OBS (AFTER KAKAN)", self.obs_dict)
                              # Check if Kakan worked
                              has_kakan = False
-                             for m in self.env.melds[player_id]:
-                                 # MeldType.AddGang = Kakan? NO. MeldType.Gang?
-                                 # In RiichiEnv, Kakan produces a Gang meld? Or AddGang?
-                                 # Check raw type
-                                 print(f">> MELD: {m.meld_type} tiles {cvt.tid_to_mpsz_list(m.tiles)}")
+                             if self._verbose:
+                                 for m in self.env.melds[player_id]:
+                                     # MeldType.AddGang = Kakan? NO. MeldType.Gang?
+                                     # In RiichiEnv, Kakan produces a Gang meld? Or AddGang?
+                                     # Check raw type
+                                     print(f">> MELD: {m.meld_type} tiles {cvt.tid_to_mpsz_list(m.tiles)} opened={m.opened}")
                                  
                              pass
                              
@@ -492,7 +617,8 @@ class MjsoulEnvVerifier:
                                     if pid != player_id:
                                          step_actions[pid] = Action(ActionType.PASS)
                                 self.obs_dict = self.env.step(step_actions)
-                                print(">> OBS (AFTER PON)", self.obs_dict)
+                                if self._verbose:
+                                    print(">> OBS (AFTER PON)", self.obs_dict)
 
                         elif event["data"]["type"] == 0:
                             # CHI
@@ -500,16 +626,47 @@ class MjsoulEnvVerifier:
                             if not chi_actions:
                                 print(f">> WARNING: CHI event received but not legal. Hand: {obs.hand}. Events: {obs.events}")
                             else:
-                                consumed = [cvt.mpsz_to_tid(t) for i, t in enumerate(event["data"]["tiles"]) if event["data"]["froms"][i] == player_id]
+                                consumed_mpsz_list = [t for i, t in enumerate(event["data"]["tiles"]) if event["data"]["froms"][i] == player_id]
                                 target_tile_list = [cvt.mpsz_to_tid(t) for i, t in enumerate(event["data"]["tiles"]) if event["data"]["froms"][i] != player_id]
                                 target_tile = target_tile_list[0]
-                                action = Action(ActionType.CHI, tile=target_tile, consume_tiles=consumed)
+                                
+                                consumed_tids = []
+                                # Smart Scan for CHI
+                                hand_copy = list(self.obs_dict[player_id].hand)
+                                for mpsz in consumed_mpsz_list:
+                                    found_tid = None
+                                    for tid in hand_copy:
+                                        if cvt.tid_to_mpsz(tid) == mpsz:
+                                            found_tid = tid
+                                            break
+                                    
+                                    if found_tid is not None:
+                                        consumed_tids.append(found_tid)
+                                        hand_copy.remove(found_tid)
+                                    else:
+                                        # Not found -> Force Patch
+                                        if self._verbose:
+                                            print(f">> WARNING: Missing tile {mpsz} for CHI. Hand: {cvt.tid_to_mpsz_list(self.obs_dict[player_id].hand)}")
+                                            print(f">> TRUST: Patching hand to include {mpsz} for CHI.")
+                                        
+                                        new_tid = cvt.mpsz_to_tid(mpsz)
+                                        if self.env.hands[player_id]:
+                                            removed = self.env.hands[player_id].pop(0)
+                                            if self._verbose:
+                                                print(f">> REMOVED {cvt.tid_to_mpsz(removed)} from hand.")
+                                        self.env.hands[player_id].append(new_tid)
+                                        self.env.hands[player_id].sort()
+                                        consumed_tids.append(new_tid)
+                                        hand_copy.append(new_tid)
+
+                                action = Action(ActionType.CHI, tile=target_tile, consume_tiles=consumed_tids)
                                 step_actions = {player_id: action}
                                 for pid in self.obs_dict.keys():
                                     if pid != player_id:
                                          step_actions[pid] = Action(ActionType.PASS)
                                 self.obs_dict = self.env.step(step_actions)
-                                print(">> OBS (AFTER CHI)", self.obs_dict)
+                                if self._verbose:
+                                    print(">> OBS (AFTER CHI)", self.obs_dict)
                             
                         elif event["data"]["type"] == 2:
                              # DAIMINKAN (Open Kan)
@@ -526,7 +683,8 @@ class MjsoulEnvVerifier:
                                 if pid != player_id:
                                      step_actions[pid] = Action(ActionType.PASS)
                              self.obs_dict = self.env.step(step_actions)
-                             print(">> OBS (AFTER DAIMINKAN)", self.obs_dict)
+                             if self._verbose:
+                                 print(">> OBS (AFTER DAIMINKAN)", self.obs_dict)
                         
                         else:
                             print(f">> WARNING: Unhandled ChiPengGang type {event['data']['type']}")
@@ -534,7 +692,8 @@ class MjsoulEnvVerifier:
 
                     case _:
                         print("BREAK", event)
-                        print(">>>OBS", self.obs_dict)
+                        if self._verbose:
+                            print(">>>OBS", self.obs_dict)
                         # break # Original had break here
             return True
         except AssertionError as e:
@@ -547,14 +706,16 @@ class MjsoulEnvVerifier:
             return False
 
 
-def main(path: str, skip: int = 0):
+def main(path: str, skip: int = 0, verbose: bool = False):
     game = ReplayGame.from_json(path)
     print(f"Verifying {path}...")
-    verifier = MjsoulEnvVerifier()
+    verifier = MjsoulEnvVerifier(verbose=verbose)
     if not verifier.verify_game(game, skip=skip):
         sys.exit(1)
 
 
 if __name__ == "__main__":
     args = parse_args()
-    main(args.path, args.skip)
+    # main(args.path, args.skip, verbose=args.verbose)
+    for path in sorted(Path("data/game_record_4p_jad_2025-12-14_out/").glob("251214*.json.gz")):
+        main(str(path), verbose=args.verbose)

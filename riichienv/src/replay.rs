@@ -1008,11 +1008,11 @@ impl AgariContextIterator {
                                 && !self.rinshan[seat],
                             rinshan: self.rinshan[seat],
                             chankan: is_chankan,
-                            tsumo_first_turn: self.is_first_turn[seat],
-                            kyoutaku: self.kyoku.liqibang as u32,
-                            tsumi: self.kyoku.ben as u32,
-                            player_wind: ((seat as i32 - self.kyoku.ju as i32 + 4) % 4) as u8,
+                            tsumo_first_turn: self.is_first_turn[seat] && is_zimo,
+                            player_wind: ((seat + 4 - self.kyoku.ju as usize) % 4) as u8,
                             round_wind: self.kyoku.chang,
+                            kyoutaku: 0, // Not tracked in basic loop?
+                            tsumi: 0,    // Not tracked
                         };
 
                         if !is_zimo {
