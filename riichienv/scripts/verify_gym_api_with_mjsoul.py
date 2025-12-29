@@ -606,11 +606,20 @@ class MjsoulEnvVerifier:
             
             # Relaxing assertion for now if needed, but original had it.
             try:
-                assert calc.han == hule["count"]
-                assert calc.fu == hule["fu"]
+                if hule.get("yiman", False):
+                    # Yakuman check
+                    assert calc.yakuman, "Expected Yakuman but calculator returned False"
+                    # For Yakuman, hule["count"] is typically number of yakumans (1, 2, etc.)
+                    # AgariCalculator returns 13 Han for standard Yakuman.
+                    # We can skip strict Han/Fu check as points verification above covers it.
+                    if self._verbose:
+                        print(f">> YAKUMAN VERIFIED. Count: {hule['count']}, Points: {calc.ron_agari or calc.tsumo_agari_ko + calc.tsumo_agari_oya}")
+                else:
+                    assert calc.han == hule["count"]
+                    assert calc.fu == hule["fu"]
             except AssertionError as e:
                 if self._verbose:
-                    print(f"Mismatch in Han/Fu: Rust calc han={calc.han} fu={calc.fu}, Expected han={hule['count']} fu={hule['fu']}")
+                    print(f"Mismatch in Han/Fu/Yakuman: Rust calc han={calc.han} fu={calc.fu} yakuman={calc.yakuman}, Expected count={hule['count']} fu={hule['fu']} yiman={hule.get('yiman', False)}")
                 raise e
 
     def verify_kyoku(self, kyoku: Any) -> bool:
