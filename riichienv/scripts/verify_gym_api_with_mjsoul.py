@@ -144,7 +144,7 @@ class MjsoulEnvVerifier:
             },
             {
                 "type": "start_kyoku",
-                "bakaze": "E",
+                "bakaze": ["E", "S", "W", "N"][data.get("chang", 0)],
                 "kyoku": data["ju"] + 1,
                 "honba": 0,
                 "kyotaku": 0,
@@ -554,7 +554,7 @@ class MjsoulEnvVerifier:
                     double_riichi=(18 in fan_ids), # 21 is Toitoi in MJSoul/Tenhou?
                     ippatsu=(30 in fan_ids), 
                     haitei=(5 in fan_ids),
-                    houtei=(6 in fan_ids or 11 in fan_ids), # 11 observed as Houtei in MJSoul
+                    houtei=(6 in fan_ids), # 11 observed as Houtei in MJSoul but also Round Wind? Removing 11 to fix mismatch.
                     rinshan=(4 in fan_ids),
                     chankan=(3 in fan_ids),
                     tsumo_first_turn=False,
