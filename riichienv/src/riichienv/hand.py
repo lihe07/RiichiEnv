@@ -1,8 +1,10 @@
 from dataclasses import dataclass, field
 
 from . import _riichienv as rust_core  # type: ignore
-from ._riichienv import Wind  # type: ignore
-from ._riichienv import Meld
+from ._riichienv import (
+    Meld,
+    Wind,  # type: ignore
+)
 
 
 @dataclass

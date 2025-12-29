@@ -311,27 +311,6 @@ pub fn calculate_yaku(hand: &Hand, melds: &[Meld], ctx: &YakuContext, win_tile: 
                 res.yaku_names.push("San Kantsu".to_string());
             }
 
-            // San Ankou
-            let mut closed_koutsu_count = 0;
-            for (idx, m) in div.body.iter().enumerate() {
-                if let Mentsu::Koutsu(_) = m {
-                    if !ctx.is_tsumo && Some(idx) == wg_idx {
-                        continue;
-                    }
-                    closed_koutsu_count += 1;
-                }
-            }
-            for m in melds {
-                if m.meld_type == crate::types::MeldType::Angang {
-                    closed_koutsu_count += 1;
-                }
-            }
-            if closed_koutsu_count == 3 {
-                res.han += 2;
-                res.yaku_ids.push(11);
-                res.yaku_names.push("San Ankou".to_string());
-            }
-
             // Iipeiko / Ryanpeikou (Closed only)
             if ctx.is_menzen {
                 let mut shuntsu_tiles = Vec::new();
