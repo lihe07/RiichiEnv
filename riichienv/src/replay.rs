@@ -87,6 +87,7 @@ pub enum RawAction {
         liqibang: u8,
         left_tile_count: Option<u8>,
         ura_doras: Option<Vec<String>>,
+        paishan: Option<String>,
     },
     #[serde(rename = "DiscardTile")]
     DiscardTile {
@@ -340,6 +341,7 @@ pub struct Kyoku {
     ben: u8,
     liqibang: u8,
     left_tile_count: u8,
+    paishan: Option<String>,
     pub actions: Arc<[Action]>,
 }
 
@@ -393,6 +395,10 @@ impl Kyoku {
             )?;
 
             nr_data.set_item("ura_doras", ud_list)?;
+        }
+
+        if let Some(paishan_str) = &self.paishan {
+            nr_data.set_item("paishan", paishan_str)?;
         }
 
         nr_event.set_item("data", nr_data)?;
@@ -550,6 +556,7 @@ impl Kyoku {
         let mut liqibang = 0;
         let mut left_tile_count = 70;
         let mut ura_doras = Vec::new();
+        let mut paishan = None;
 
         if let RawAction::NewRound {
             scores: s,
@@ -567,6 +574,7 @@ impl Kyoku {
             liqibang: l,
             left_tile_count: lc,
             ura_doras: ud,
+            paishan: p,
         } = &raw_actions[0]
         {
             scores = s.clone();
@@ -606,6 +614,7 @@ impl Kyoku {
                     .map(|v| TileConverter::parse_tile_136(v))
                     .collect();
             }
+            paishan = p.clone();
         }
 
         let mut actions = Vec::with_capacity(raw_actions.len());
@@ -623,6 +632,7 @@ impl Kyoku {
             ben,
             liqibang,
             left_tile_count,
+            paishan,
             actions: Arc::from(actions),
         }
     }

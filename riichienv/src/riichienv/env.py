@@ -8,6 +8,7 @@ from ._riichienv import Meld, MeldType
 from .action import Action, ActionType
 from .game_mode import GameType
 from .hand import AgariCalculator, Conditions
+import riichienv.convert as cvt
 
 
 @dataclass
@@ -82,6 +83,9 @@ def _to_mjai_tile(tile_136: int) -> str:
     else:  # Honor
         offset = tile_136 - 108
         num = offset // 4 + 1
+        mjai_honors = ["E", "S", "W", "N", "P", "F", "C"]
+        if 1 <= num <= 7:
+            return mjai_honors[num - 1]
         return f"{num}z"
 
 
@@ -150,18 +154,28 @@ class RiichiEnv:
         # Current logic state
         self.drawn_tile: int | None = None  # The tile currently drawn by current_player
 
-    def reset(self, oya: int = 0, dora_indicators: list[int] | None = None) -> dict[int, Observation]:
+    def reset(self, oya: int = 0, wall: list[int] | None = None) -> dict[int, Observation]:
         self._rng = random.Random(self._seed)  # Reset RNG if seed was fixed? Or continue? Usually new seed or continue.
 
         self.oya = oya
-        self.dora_indicators = dora_indicators if dora_indicators is not None else []
-        # If seed was None, random.Random(None) uses system time.
+        self.dora_indicators = []
 
-        # Initialize tiles: 136 tiles
-        # 0-33 are tile types. Each type has 4 copies.
-        # IDs: 0-135. Type = id // 4.
-        self.wall = list(range(136))
-        self._rng.shuffle(self.wall)
+        # Initialize tiles
+        if wall is not None:
+            # Paishan provided.
+            self.wall = list(reversed(wall))
+
+            assert len(self.wall) > 13, "Wall must have at least 13 tiles."
+            self.dora_indicators = [self.wall[4]]
+
+        else:
+            # Random shuffle
+            # Initialize tiles: 136 tiles
+            # 0-33 are tile types. Each type has 4 copies.
+            # IDs: 0-135. Type = id // 4.
+            self.wall = list(range(136))
+            self._rng.shuffle(self.wall)
+            self.dora_indicators = [self.wall[4]]
 
         # Secure Wall
         self.salt = "".join([chr(self._rng.randint(33, 126)) for _ in range(16)])  # Random ASCII salt
@@ -226,11 +240,19 @@ class RiichiEnv:
             "honba": self._custom_honba,
             "kyotaku": self._custom_kyotaku,
             "oya": 0,
-            "dora_marker": _to_mjai_tile(
-                self.wall[0]
-            ),  # Fake dora marker logic: usually wall[5] or similar. Using wall[0] for current simplistic impl.
+            "dora_marker": _to_mjai_tile(self.dora_indicators[0])
+            if self.dora_indicators
+            else _to_mjai_tile(self.wall[4]),  # Use wall[4] if not set, or ensure set
             "tehais": tehais,
         }
+
+        # Ensure dora_indicators is populated if empty (Random case)
+        if not self.dora_indicators and len(self.wall) > 14:
+            self.dora_indicators = [self.wall[4]]
+            # Update event if needed, but we constructed it above.
+            # Better to set it before constructing event.
+            start_kyoku_event["dora_marker"] = _to_mjai_tile(self.dora_indicators[0])
+
         self.mjai_log.append(start_kyoku_event)
 
         # Tsumo Event for Dealer
@@ -357,7 +379,7 @@ class RiichiEnv:
 
                 self._execute_claim(self.current_player, action)
 
-                if not self.wall:
+                if len(self.wall) <= 14:
                     self.is_done = True
                     self.mjai_log.append({"type": "ryukyoku", "reason": "exhaustive_draw"})
                     self.mjai_log.append({"type": "end_kyoku"})
@@ -365,7 +387,7 @@ class RiichiEnv:
                     return self._get_observations([])
 
                 # Rinshan Draw
-                self.drawn_tile = self.wall.pop()
+                self.drawn_tile = self.wall.pop(0)
                 # Log Tsumo (Rinshan)
                 tsumo_event = {"type": "tsumo", "actor": self.current_player, "tile": _to_mjai_tile(self.drawn_tile)}
                 self.mjai_log.append(tsumo_event)
@@ -514,7 +536,8 @@ class RiichiEnv:
                 # Calc Ron
                 # player_wind: (pid - oya + 4) % 4
                 p_wind = (pid - self.oya + 4) % 4
-                is_houtei = not self.wall  # Win on discard when wall is empty
+                # NOTE: カンをすると王牌から一枚引くので牌山は一枚減る。カンされた後でこの判定式で河底撈魚を扱えるかは後で要検討
+                is_houtei = len(self.wall) <= 14  # Win on discard when wall is empty (14 dead tiles)
 
                 res = AgariCalculator(self.hands[pid], self.melds.get(pid, [])).calc(
                     discard_tile_id,
@@ -665,14 +688,14 @@ class RiichiEnv:
                 self.drawn_tile = None  # No draw after call (except some Kan...)
 
                 if action.type == ActionType.DAIMINKAN:
-                    if not self.wall:
+                    if len(self.wall) <= 14:
                         self.is_done = True
                         self.mjai_log.append({"type": "ryukyoku", "reason": "exhaustive_draw"})
                         self.mjai_log.append({"type": "end_kyoku"})
                         self.mjai_log.append({"type": "end_game"})
                         return self._get_observations([])
 
-                    self.drawn_tile = self.wall.pop()
+                    self.drawn_tile = self.wall.pop(0)
                     # Log Tsumo (Rinshan)
                     tsumo_event = {
                         "type": "tsumo",
@@ -704,7 +727,7 @@ class RiichiEnv:
             self.phase = Phase.WAIT_ACT
             self.active_players = [self.current_player]
 
-            if self.wall:
+            if len(self.wall) > 14:
                 self.drawn_tile = self.wall.pop()
                 # Log Tsumo
                 tsumo_event = {"type": "tsumo", "actor": self.current_player, "tile": _to_mjai_tile(self.drawn_tile)}
@@ -1041,6 +1064,12 @@ class RiichiEnv:
         elif action.type == ActionType.KAKAN:
             mjai_type = "kan"  # Add kan
 
+        # Reveal Kan Dora Logic
+        # We assume immediate reveal for all Kans in this simplified implementation.
+        # Check if action is Kan
+        if action.type in [ActionType.ANKAN, ActionType.DAIMINKAN, ActionType.KAKAN]:
+            self._reveal_kan_dora()
+
         discarder = self.last_discard["seat"] if self.last_discard else -1
 
         event = {
@@ -1198,24 +1227,92 @@ class RiichiEnv:
 
         return deltas
 
+    def _reveal_kan_dora(self) -> None:
+        """
+        Reveals a new Kan Dora indicator from the Dead Wall.
+        Indices (Original/Pre-Rinshan):
+         Initial: 4
+         Kan 1: 2 (Left / Deeper) - Based on MJSoul log observation
+         Kan 2: 6 (Right)
+         Kan 3: 8 (Right)
+         Kan 4: 10 (Right)
+        
+        Note: Wall indices shift left by 1 for each Rinshan draw (pop(0)).
+        """
+        # Current count (includes initial dora)
+        count = len(self.dora_indicators)
+        # Max 5 indicators (1 initial + 4 Kans)
+        if count >= 5:
+            return
+
+        # Lookup table for ORIGINAL indices (before any pops)
+        # 4 -> 2 -> 6 -> 8 -> 10
+        dora_origin_indices = [4, 2, 6, 8, 10]
+        
+        target_origin = dora_origin_indices[count]
+        
+        # Calculate Current Index
+        # Each previous Kan (count - 1) caused 1 pop(0).
+        # So shift = count - 1. (Initial dora doesn't cause pop).
+        # Wait, count includes Initial.
+        # Kan 1: count=1. Previous Kans=0. Shift=0.
+        # Kan 2: count=2. Previous Kans=1. Shift=1.
+        shift = count - 1 if count > 0 else 0
+        
+        next_idx = target_origin - shift
+        
+        if 0 <= next_idx < len(self.wall):
+            new_dora_ind = self.wall[next_idx]
+            self.dora_indicators.append(new_dora_ind)
+
+            # Log event
+            dora_event = {"type": "dora", "dora_marker": _to_mjai_tile(new_dora_ind)}
+            self.mjai_log.append(dora_event)
+
     def _get_ura_markers(self) -> list[str]:
         """
         Return ura dora markers from the wall.
-        For this simplified implementation, we return the tile under the first dora indicator.
-        Dora indicator is at index 0 (self.wall[0]).
-        Ura indicator would be at index 1? Or conventionally determined index.
-        In standard wall construction:
-        Dead wall 14 tiles.
-        Dora ind: 3rd tile from back (index 5 in 0-indexed 14-tile dead wall).
-        Ura ind: 4th tile (under dora).
-
-        Our `reset` logic:
-        wall = list(range(136))
-        shuffle(wall)
-
-        We used `wall[0]` as dora_marker in `start_kyoku`.
-        Let's use `wall[1]` as ura_marker for consistency with that simple choice.
+        Indices correspond to Dora Indicators but +1 (Bottom of stack).
+        Dora Indices (Omote): 4, 6, 8... (in original space)
+        Ura Indices: 5, 7, 9... (in original space)
+        
+        So Ura is ALWAYS Omote + 1.
         """
-        if len(self.wall) > 1:
-            return [_to_mjai_tile(self.wall[1])]
-        return []
+        ura_markers = []
+        # We iterate through known dora indicators.
+        # But `self.dora_indicators` contains values, not indices.
+        # We must re-calculate current indices in `self.wall`.
+        
+        # NOTE: This implies we must know how many Rinshans occurred (shifts).
+        # Loop i from 0 to len(dora)-1.
+        # i=0 (Initial): Shift=?
+        # We need check if shifts affect ALL indices uniformly?
+        # Yes, `pop(0)` removes from head, shifting EVERYTHING to left.
+        #
+        # So Current Index = Original Index - Total Shifts.
+        # Total Shifts = Current number of Kans?
+        # No, depends on WHEN the dora was added? 
+        # No, `self.wall` is the LIVE current state.
+        # So we just need the CURRENT index of that tile.
+        #
+        # Can we find `dora_ind` in `self.wall`?
+        # `self.wall.index(dora_val)`?
+        # Yes, tiles are unique (IDs 0..135).
+        # So we can just find the Omote Dora, and take `index + 1`.
+        #
+        # Is Ura always `index + 1`?
+        # Original: Omote=4, Ura=5.
+        # Shifted: Omote=3, Ura=4.
+        # Yes, relative order is preserved.
+        
+        for dora_val in self.dora_indicators:
+            try:
+                idx = self.wall.index(dora_val)
+                ura_idx = idx + 1
+                if ura_idx < len(self.wall):
+                    ura_markers.append(_to_mjai_tile(self.wall[ura_idx]))
+            except ValueError:
+                # Dora not in wall? Should not happen unless bug.
+                pass
+
+        return ura_markers

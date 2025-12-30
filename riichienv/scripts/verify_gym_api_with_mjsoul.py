@@ -104,6 +104,7 @@ class MjsoulEnvVerifier:
         self.env: RiichiEnv = RiichiEnv()
         self.obs_dict: dict[int, Any] | None = None
         self.dora_indicators: list[int] = []
+        self.using_paishan = False
         self._verbose = verbose
 
     def verify_game(self, game: Any, skip: int = 0) -> bool:
@@ -117,26 +118,31 @@ class MjsoulEnvVerifier:
         return True
 
     def _new_round(self, kyoku: Any, event: Any) -> None:
-        events = kyoku.events()
-        env_wall = []
-        tid_count = {}
-        for event_ in events:
-            if event_["name"] == "DealTile":
-                tid = cvt.mpsz_to_tid(event_["data"]["tile"])
-                cnt = 0
-                if tid in tid_count:
-                    cnt = tid_count[tid]
-                    tid_count[tid] += 1
-                else:
-                    tid_count[tid] = 1
-                tid = tid + cnt
-                env_wall.append(tid)
-        env_wall = list(reversed(env_wall))
-
         data = event["data"]
-        self.dora_indicators = [cvt.mpsz_to_tid(t) for t in data["doras"]]
+        assert "paishan" in data, "Paishan not found in NewRound event."
+
+        # Determine Wall
+        # Prefer paishan if available (contains full 136 tiles including Dead Wall)
+        paishan_wall = None
+        if "paishan" in data:
+            try:
+                paishan_wall = cvt.paishan_to_wall(data["paishan"])
+                if self._verbose:
+                    print(f">> PAISHAN LOADED: {len(paishan_wall)} tiles")
+            except Exception as e:
+                logger.error(f"Failed to parse paishan: {e}")
+                raise
+
+        self.using_paishan = True
         self.env = RiichiEnv()
-        self.env.reset(oya=data["ju"] % 4, dora_indicators=self.dora_indicators)
+        self.env.reset(oya=data["ju"] % 4, wall=paishan_wall)
+
+        if not self.env.dora_indicators:
+            logger.warning(">> WARNING: RiichiEnv did not extract any Dora from Paishan!")
+
+        # self.dora_indicators used by verifier:
+        self.dora_indicators = self.env.dora_indicators[:]
+
         self.env.mjai_log = [
             {
                 "type": "start_game",
@@ -172,7 +178,6 @@ class MjsoulEnvVerifier:
         self.env.drawn_tile = cvt.mpsz_to_tid(raw_first_tile)
         self.env.current_player = first_actor
         self.env.active_players = [first_actor]
-        self.env.wall = env_wall
         self.obs_dict = self.env._get_observations([first_actor])
 
     def _discard_tile(self, event: Any) -> None:
@@ -546,7 +551,7 @@ class MjsoulEnvVerifier:
 
             calc = AgariCalculator(hand_for_calc, self.env.melds[player_id]).calc(
                 winning_tile, 
-                dora_indicators=self.dora_indicators,
+                dora_indicators=self.env.dora_indicators,
                 ura_indicators=ura_indicators,
                 conditions=Conditions(
                     tsumo=(action.type == ActionType.TSUMO),
@@ -628,18 +633,28 @@ class MjsoulEnvVerifier:
 
             for event in events:
                 # NOTE: カンによる新しいドラ表示牌の追加処理
-                # おそらく DiscardTile event のみで発生するが、念の為ここで処理する
+                # DiscardTile, DealTile event のみで発生する。共通処理としてここで処理
                 # 以下の処理の流れが理想
-                # - カンが発生した場合に適切なタイミングで牌山から RiichiEnv がドラ表示牌を追加する
-                # - 検証では最初にログを走査してカンによって得られるドラ表示牌を調べておき、牌山にセットしておく
-                if "doras" in event["data"]:
-                    for d_str in event["data"]["doras"]:
-                        d_tid = cvt.mpsz_to_tid(d_str)
-                        if d_tid not in self.dora_indicators:
+                # - カンが発生した場合に適切なタイミングで牌山から RiichiEnv がドラ表示牌を追加
+                # - 牌山が初期化されているので、新ドラは自動的に決定できる
+                if event["name"] in ["DealTile", "DiscardTile"] and "doras" in event["data"]:
+                    # print(">> DORA", event["data"]["doras"], event["name"], cvt.tid_to_mpsz_list(self.env.dora_indicators))
+                    # Always treat Log as authoritative for the LIST of doras (including duplicates)
+                    log_doras = [cvt.mpsz_to_tid(d) for d in event["data"]["doras"]]
+
+                    if not self.using_paishan:
+                        # Legacy: Overwrite Env to match Log (handles duplicates like [1s, 1s])
+                        self.env.dora_indicators = log_doras[:]
+                        self.dora_indicators = log_doras[:]
+                    else:
+                        # Paishan: Env should have updated itself via Actions.
+                        # Verify consistency (counts).
+                        if len(self.env.dora_indicators) != len(log_doras):
                             if self._verbose:
-                                logger.debug(f">> NEW DORA INDICATOR: {d_str} ({d_tid})")
-                            self.dora_indicators.append(d_tid)
-                            self.env.dora_indicators = self.dora_indicators[:]
+                                logger.warning(f">> DORA COUNT MISMATCH: Env {len(self.env.dora_indicators)}, Log {len(log_doras)}")
+                            # Optional: We could force sync if we distrust Env, but we want to verify Env.
+                            # If count is less, Env missed a reveal?
+                            pass
 
                 match event["name"]:
                     case "NewRound":
@@ -866,20 +881,21 @@ class MjsoulEnvVerifier:
                         self._handle_chipenggang(event, player_id, self.obs_dict[player_id])
 
                     case _:
-                        print("BREAK", event)
+                        logger.error("UNHANDLED Event: {}".format(json.dumps(event)))
                         if self._verbose:
                             print(">>>OBS", self.obs_dict)
-                        # break # Original had break here
+                        assert False, f"UNHANDLED Event: {event}"
+
             return True
+
         except AssertionError as e:
-            print(f"Verification Assertion Failed: {e}")
+            logger.error(f"Verification Assertion Failed: {e}")
             traceback.print_exc()
             return False
         except Exception as e:
-            print(f"Verification Error: {e}")
+            logger.error(f"Verification Error: {e}")
             traceback.print_exc()
             return False
-
 
     def _handle_chipenggang(self, event, player_id, obs):
         if event["data"]["type"] == 1:
