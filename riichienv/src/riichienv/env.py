@@ -159,6 +159,7 @@ class RiichiEnv:
 
         self.oya = oya
         self.dora_indicators = []
+        self.pending_kan_dora = False  # Track if a Kakan Dora needs to be revealed after discard
 
         # Initialize tiles
         if wall is not None:
@@ -233,6 +234,7 @@ class RiichiEnv:
         for pid in range(4):
             tehais.append([_to_mjai_tile(t) for t in self.hands[pid]])
 
+        assert len(self.dora_indicators) > 0
         start_kyoku_event = {
             "type": "start_kyoku",
             "bakaze": "E" if self._custom_round_wind == 0 else "S",  # TODO: Proper wind mapping
@@ -240,26 +242,14 @@ class RiichiEnv:
             "honba": self._custom_honba,
             "kyotaku": self._custom_kyotaku,
             "oya": 0,
-            "dora_marker": _to_mjai_tile(self.dora_indicators[0])
-            if self.dora_indicators
-            else _to_mjai_tile(self.wall[4]),  # Use wall[4] if not set, or ensure set
+            "dora_marker": _to_mjai_tile(self.dora_indicators[0]),
             "tehais": tehais,
         }
-
-        # Ensure dora_indicators is populated if empty (Random case)
-        if not self.dora_indicators and len(self.wall) > 14:
-            self.dora_indicators = [self.wall[4]]
-            # Update event if needed, but we constructed it above.
-            # Better to set it before constructing event.
-            start_kyoku_event["dora_marker"] = _to_mjai_tile(self.dora_indicators[0])
-
         self.mjai_log.append(start_kyoku_event)
 
         # Tsumo Event for Dealer
         tsumo_event = {"type": "tsumo", "actor": 0, "tile": _to_mjai_tile(self.drawn_tile)}
         self.mjai_log.append(tsumo_event)
-
-        # Check Tsumo logic...
 
         return self._get_observations(self.active_players)  # Start state
 
@@ -308,11 +298,11 @@ class RiichiEnv:
 
                 self.riichi_stage[self.current_player] = True
 
-                # Log Reach (Step 1 usually calls "reach", then "reach" again after discard using "step" 2?)
+                # Log Reach (Step 1 usually calls "reach", then "reach_accepted" after discard using "step" 2)
                 # MJAI spec:
                 # 1. "reach", actor:X (Declaration)
                 # 2. "dahai", actor:X, tile:T, reach:True (Discard with reach)
-                # 3. "reach", actor:X, score:S, delta:-1000 (Payment)
+                # 3. "reach_accepted", actor:X, score:S, delta:-1000 (Payment)
 
                 # Here we just log the declaration "reach" event.
                 reach_event = {"type": "reach", "actor": self.current_player}
@@ -504,6 +494,20 @@ class RiichiEnv:
                 "reach": last_event_is_reach,
             }
             self.mjai_log.append(dahai_event)
+
+            # Check Pending Kan Dora (from Kakan/AddGang)
+            # Rule: Kakan Dora is revealed AFTER the discard is placed (and before next draw).
+            # If Ron occurs on this discard (Chankan), the Kan is invalid/robbed, so no Dora.
+            # But here we are just logging the discard.
+            # We reveal the dora now?
+            # Standard: Discard -> (Check Claims/Ron) -> Reveal Dora -> Next Turn.
+            # But if claimed (Pon/Chi), Dora IS revealed.
+            # If claimed (Ron), game ends (no Dora).
+            # So revealing here (in LOG) is correct for "After Discard".
+            # The environment update should happen here too.
+            if self.pending_kan_dora:
+                self._reveal_kan_dora()
+                self.pending_kan_dora = False
 
             if last_event_is_reach:
                 # Append the score update event (Step 3 of Riichi)
@@ -1065,10 +1069,15 @@ class RiichiEnv:
             mjai_type = "kan"  # Add kan
 
         # Reveal Kan Dora Logic
-        # We assume immediate reveal for all Kans in this simplified implementation.
-        # Check if action is Kan
-        if action.type in [ActionType.ANKAN, ActionType.DAIMINKAN, ActionType.KAKAN]:
-            self._reveal_kan_dora()
+        # Ankan: Immediate (Pre-Rinshan)
+        # Daiminkan: MJSoul uses Ato-None (Post-Discard) -> Delay
+        # Kakan: Ato-None (Post-Discard) -> Delay
+
+        if action.type == ActionType.ANKAN:
+            self._reveal_kan_dora(post_rinshan=False)
+        elif action.type in [ActionType.DAIMINKAN, ActionType.KAKAN]:
+            # Delay
+            self.pending_kan_dora = True
 
         discarder = self.last_discard["seat"] if self.last_discard else -1
 
@@ -1227,29 +1236,38 @@ class RiichiEnv:
 
         return deltas
 
-    def _reveal_kan_dora(self) -> None:
+    def _reveal_kan_dora(self, post_rinshan: bool = True) -> None:
         """
         Reveals a new Kan Dora indicator from the Dead Wall.
-        Indices (Original/Pre-Rinshan):
-         Initial: 4
-         Kan 1: 6 (Right / Towards Live Wall)
-         Kan 2: 8 ...
 
-        Logic:
-         Target Original Index = 4 + 2 * count
-         Shift = count - 1 (Previous Kans caused Rinshan draws)
-         Current Index = Target - Shift = 4 + 2*count - (count - 1) = 5 + count.
+        Indices logic:
+        - Original Indices: 4 (Init), 6 (Kan1), 8 (Kan2)... => 4 + 2*count
+        - Rinshan Pop Shift: -1 per Kan.
 
-         Count=1 -> 6 (Index 6)
-         Count=2 -> 7 (Index 7 = Orig 8 shifted 1)
+        If post_rinshan (After Rinshan Draw, e.g. Kakan/Daiminkan Ato-None):
+          - We have popped 'count' times (including current Kan).
+          - Shift = count.
+          - Index = (4 + 2*count) - count = 4 + count.
+
+        If NOT post_rinshan (Before Rinshan Draw, e.g. Ankan Saki-Nori):
+          - We have popped 'count - 1' times.
+          - Shift = count - 1.
+            # If NOT post_rinshan (Before Rinshan Draw, e.g. Ankan Saki-Nori):
+            #   We have popped 'count - 1' times.
+            #   Shift = count - 1.
+            #   Index = (4 + 2*count) - (count - 1) = 5 + count.
         """
         # Current count (includes initial dora)
         count = len(self.dora_indicators)
-        # Max 5 indicators
-        if count >= 5:
-            return
+        # Shift = count (Due to Kan pop(0) from Dead Wall)
+        if post_rinshan:
+            next_idx = 4 + count
+        else:
+            next_idx = 5 + count
 
-        next_idx = 5 + count
+        print(
+            f"DEBUG: REVEAL KAN DORA. post_rinshan={post_rinshan}. Count={count}. NextIdx={next_idx}. Tile={cvt.tid_to_mpsz(self.wall[next_idx])}"
+        )
 
         if 0 <= next_idx < len(self.wall):
             new_dora_ind = self.wall[next_idx]

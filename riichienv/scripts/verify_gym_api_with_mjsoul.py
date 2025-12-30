@@ -223,7 +223,11 @@ class MjsoulEnvVerifier:
         # Normal discard (or forced)
         # Re-fetch legal actions or just construct specific action
         # Riichi Step
-        if event["data"]["is_liqi"]:
+        is_liqi = event["data"].get("is_liqi", False)
+        if self._verbose:
+            print(f"DEBUG: Checking is_liqi. Value={is_liqi} Type={type(is_liqi)}")
+            
+        if is_liqi:
             if self._verbose:
                 print(f">> TRUST: Executing RIICHI step for {player_id}")
             # Helper to find Riichi action
@@ -234,6 +238,11 @@ class MjsoulEnvVerifier:
                 if self._verbose:
                     print(">> WARNING: Riichi flag true but no Riichi action? Forcing Riichi action.")
                 self.obs_dict = self.env.step({player_id: Action(ActionType.RIICHI)})
+
+        if player_id == 0 and len(self.obs_dict[player_id].hand) < 13:
+             if self._verbose:
+                 print(f"DEBUG: Player 0 Hand Size Mismatch! Size= {len(self.obs_dict[player_id].hand)}")
+                 print(f"DEBUG: Player 0 Events: {self.obs_dict[player_id].events}")
 
         # Discard Step
         # Manually construct action to ensure we use the target tile
@@ -546,8 +555,15 @@ class MjsoulEnvVerifier:
             
             fan_ids = set(f["id"] for f in hule["fans"])
 
-            # Check menzen
             is_menzen = all(not m.opened for m in self.env.melds[player_id])
+            
+            if self._verbose:
+                print(f"DEBUG: Agari Calculation Context for Player {player_id}")
+                print(f"DEBUG: Dora Indicators: {cvt.tid_to_mpsz_list(self.env.dora_indicators)}")
+                print(f"DEBUG: Hand: {cvt.tid_to_mpsz_list(hand_for_calc)}")
+                print(f"DEBUG: Win Tile: {cvt.tid_to_mpsz(winning_tile)}")
+                print(f"DEBUG: Riichi Declared Array: {self.env.riichi_declared}")
+                print(f"DEBUG: Player {player_id} Riichi: {self.env.riichi_declared[player_id]}")
 
             calc = AgariCalculator(hand_for_calc, self.env.melds[player_id]).calc(
                 winning_tile, 
@@ -662,6 +678,7 @@ class MjsoulEnvVerifier:
 
                     case "DiscardTile":
                         self._discard_tile(event)
+
 
                     case "DealTile":
                         # NOTE: RiichiEnv 内部で処理されるので検証のみ
@@ -885,6 +902,13 @@ class MjsoulEnvVerifier:
                         if self._verbose:
                             print(">>>OBS", self.obs_dict)
                         assert False, f"UNHANDLED Event: {event}"
+
+            # DEBUG: Check Player 0 Hand Size after every event
+            if 0 in self.obs_dict:
+                hand_size = len(self.obs_dict[0].hand)
+                if hand_size < 13 and hand_size > 0: # Filter out empty hands at start/end if any
+                     print(f"DEBUG: >> ALERT: Player 0 Hand Size DROP to {hand_size} after event {event['name']}")
+
 
             return True
 

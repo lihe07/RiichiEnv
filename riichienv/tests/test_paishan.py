@@ -47,9 +47,11 @@ class TestPaishan:
         assert len(env.dora_indicators) == 1
         assert cvt.tid_to_mpsz(env.dora_indicators[0]) == "4s"
 
+        # Simulate Rinshan draw (Popping from Dead Wall side 0)
+        env.wall.pop(0)
         env._reveal_kan_dora()
         assert len(env.dora_indicators) == 2
-        # Index 6 of this wall is 0p (Red 5p, ID 52).
+        # Index 6 of original wall (now index 5) is 0p.
         assert cvt.tid_to_mpsz(env.dora_indicators[1]) == "0p"
 
     def test_kan_dora_reveal(self):
@@ -63,9 +65,11 @@ class TestPaishan:
         assert env.dora_indicators[0] == 131
 
         # Kan 1
+        # Simulate Rinshan draw
+        env.wall.pop(0)
         env._reveal_kan_dora()
         assert len(env.dora_indicators) == 2
-        # Next index: 6. self.wall[6] = 129.
+        # Next index: 6. self.wall[6] (new wall[5]) = 129.
         assert env.dora_indicators[1] == 129
 
         # Check Ura
