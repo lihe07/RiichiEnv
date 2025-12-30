@@ -49,7 +49,8 @@ class TestPaishan:
 
         env._reveal_kan_dora()
         assert len(env.dora_indicators) == 2
-        assert cvt.tid_to_mpsz(env.dora_indicators[1]) == "2p"
+        # Index 6 of this wall is 0p (Red 5p, ID 52).
+        assert cvt.tid_to_mpsz(env.dora_indicators[1]) == "0p"
 
     def test_kan_dora_reveal(self):
         """Verify Kan Dora reveal logic."""
@@ -64,14 +65,12 @@ class TestPaishan:
         # Kan 1
         env._reveal_kan_dora()
         assert len(env.dora_indicators) == 2
-        # Next index: 2 (Left of Dora 1). self.wall[2] = 133.
-        assert env.dora_indicators[1] == 133
+        # Next index: 6. self.wall[6] = 129.
+        assert env.dora_indicators[1] == 129
 
         # Check Ura
         # Ura should be wall[5] (130) and wall[7] (128).
         uras = env._get_ura_markers()
-        # Ura should be wall[5] (130) and wall[3] (132).
-        uras = env._get_ura_markers()
         assert len(uras) == 2
         assert uras[0] == cvt.tid_to_mjai(130)
-        assert uras[1] == cvt.tid_to_mjai(132)
+        assert uras[1] == cvt.tid_to_mjai(128)

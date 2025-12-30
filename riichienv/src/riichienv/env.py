@@ -1232,35 +1232,25 @@ class RiichiEnv:
         Reveals a new Kan Dora indicator from the Dead Wall.
         Indices (Original/Pre-Rinshan):
          Initial: 4
-         Kan 1: 2 (Left / Deeper) - Based on MJSoul log observation
-         Kan 2: 6 (Right)
-         Kan 3: 8 (Right)
-         Kan 4: 10 (Right)
-        
-        Note: Wall indices shift left by 1 for each Rinshan draw (pop(0)).
+         Kan 1: 6 (Right / Towards Live Wall)
+         Kan 2: 8 ...
+
+        Logic:
+         Target Original Index = 4 + 2 * count
+         Shift = count - 1 (Previous Kans caused Rinshan draws)
+         Current Index = Target - Shift = 4 + 2*count - (count - 1) = 5 + count.
+
+         Count=1 -> 6 (Index 6)
+         Count=2 -> 7 (Index 7 = Orig 8 shifted 1)
         """
         # Current count (includes initial dora)
         count = len(self.dora_indicators)
-        # Max 5 indicators (1 initial + 4 Kans)
+        # Max 5 indicators
         if count >= 5:
             return
 
-        # Lookup table for ORIGINAL indices (before any pops)
-        # 4 -> 2 -> 6 -> 8 -> 10
-        dora_origin_indices = [4, 2, 6, 8, 10]
-        
-        target_origin = dora_origin_indices[count]
-        
-        # Calculate Current Index
-        # Each previous Kan (count - 1) caused 1 pop(0).
-        # So shift = count - 1. (Initial dora doesn't cause pop).
-        # Wait, count includes Initial.
-        # Kan 1: count=1. Previous Kans=0. Shift=0.
-        # Kan 2: count=2. Previous Kans=1. Shift=1.
-        shift = count - 1 if count > 0 else 0
-        
-        next_idx = target_origin - shift
-        
+        next_idx = 5 + count
+
         if 0 <= next_idx < len(self.wall):
             new_dora_ind = self.wall[next_idx]
             self.dora_indicators.append(new_dora_ind)
@@ -1275,14 +1265,14 @@ class RiichiEnv:
         Indices correspond to Dora Indicators but +1 (Bottom of stack).
         Dora Indices (Omote): 4, 6, 8... (in original space)
         Ura Indices: 5, 7, 9... (in original space)
-        
+
         So Ura is ALWAYS Omote + 1.
         """
         ura_markers = []
         # We iterate through known dora indicators.
         # But `self.dora_indicators` contains values, not indices.
         # We must re-calculate current indices in `self.wall`.
-        
+
         # NOTE: This implies we must know how many Rinshans occurred (shifts).
         # Loop i from 0 to len(dora)-1.
         # i=0 (Initial): Shift=?
@@ -1291,7 +1281,7 @@ class RiichiEnv:
         #
         # So Current Index = Original Index - Total Shifts.
         # Total Shifts = Current number of Kans?
-        # No, depends on WHEN the dora was added? 
+        # No, depends on WHEN the dora was added?
         # No, `self.wall` is the LIVE current state.
         # So we just need the CURRENT index of that tile.
         #
@@ -1304,7 +1294,7 @@ class RiichiEnv:
         # Original: Omote=4, Ura=5.
         # Shifted: Omote=3, Ura=4.
         # Yes, relative order is preserved.
-        
+
         for dora_val in self.dora_indicators:
             try:
                 idx = self.wall.index(dora_val)
