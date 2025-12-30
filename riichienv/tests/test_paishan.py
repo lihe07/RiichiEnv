@@ -49,6 +49,7 @@ class TestPaishan:
 
         # Simulate Rinshan draw (Popping from Dead Wall side 0)
         env.wall.pop(0)
+        env.pending_kan_dora_count = 1  # Manual usage requires setting pending count for correct index calc
         env._reveal_kan_dora()
         assert len(env.dora_indicators) == 2
         # Index 6 of original wall (now index 5) is 0p.
@@ -67,6 +68,7 @@ class TestPaishan:
         # Kan 1
         # Simulate Rinshan draw
         env.wall.pop(0)
+        env.pending_kan_dora_count = 1  # Manual usage requires setting pending count for correct index calc
         env._reveal_kan_dora()
         assert len(env.dora_indicators) == 2
         # Next index: 6. self.wall[6] (new wall[5]) = 129.

@@ -141,6 +141,7 @@ class RiichiEnv:
         # Round State
         self.oya: int = 0
         self.dora_indicators: list[int] = []
+        self.pending_kan_dora_count: int = 0
 
         # Security
         self.wall_digest: str = ""
@@ -159,7 +160,7 @@ class RiichiEnv:
 
         self.oya = oya
         self.dora_indicators = []
-        self.pending_kan_dora = False  # Track if a Kakan Dora needs to be revealed after discard
+        self.pending_kan_dora_count = 0  # Track count of Kakan Doras to reveal
 
         # Initialize tiles
         if wall is not None:
@@ -254,6 +255,10 @@ class RiichiEnv:
         return self._get_observations(self.active_players)  # Start state
 
     def step(self, actions: dict[int, Action]) -> dict[int, Observation]:
+        # DEBUG: Trace Step
+        import sys
+
+        # print(f"DEBUG: ENV STEP CALLED. Actions: {actions}", file=sys.stderr)
         """
         Execute one step.
         actions: Map from player_id to Action.
@@ -486,6 +491,7 @@ class RiichiEnv:
             )
 
             # Log Dahai
+            # print(f"DEBUG: DISCARD STEP. Actor={self.current_player} PendingCount={self.pending_kan_dora_count}")
             dahai_event = {
                 "type": "dahai",
                 "actor": self.current_player,
@@ -505,9 +511,10 @@ class RiichiEnv:
             # If claimed (Ron), game ends (no Dora).
             # So revealing here (in LOG) is correct for "After Discard".
             # The environment update should happen here too.
-            if self.pending_kan_dora:
+            while self.pending_kan_dora_count > 0:
+                # print(f"DEBUG: STEP(DISCARD) -> REVEALING PENDING DORA (Remaining: {self.pending_kan_dora_count})")
                 self._reveal_kan_dora()
-                self.pending_kan_dora = False
+                self.pending_kan_dora_count -= 1
 
             if last_event_is_reach:
                 # Append the score update event (Step 3 of Riichi)
@@ -1077,7 +1084,8 @@ class RiichiEnv:
             self._reveal_kan_dora(post_rinshan=False)
         elif action.type in [ActionType.DAIMINKAN, ActionType.KAKAN]:
             # Delay
-            self.pending_kan_dora = True
+            # print("DEBUG: EXECUTE CLAIM -> Incrementing Pending Count (Kakan/Daiminkan)")
+            self.pending_kan_dora_count += 1
 
         discarder = self.last_discard["seat"] if self.last_discard else -1
 
@@ -1259,15 +1267,19 @@ class RiichiEnv:
         """
         # Current count (includes initial dora)
         count = len(self.dora_indicators)
-        # Shift = count (Due to Kan pop(0) from Dead Wall)
-        if post_rinshan:
-            next_idx = 4 + count
-        else:
-            next_idx = 5 + count
+        # Unified Formula: 5 + count - pending_count
+        # This handles both:
+        # 1. Ankan (Immediate): Has not popped its own Rinshan yet. pending accounts for PRIOR pops.
+        #    Target = Orig(4+2*c) - PriorPops. PriorPops = (c-1) + pending.
+        #    Target = 5 + c - pending.
+        # 2. Kakan (Delayed): Has popped its own Rinshan. pending includes itself.
+        #    Target = Orig(4+2*c) - TopsPops. TotalPops = (c-1) + pending.
+        #    Target = 5 + c - pending.
+        next_idx = 5 + count - self.pending_kan_dora_count
 
-        print(
-            f"DEBUG: REVEAL KAN DORA. post_rinshan={post_rinshan}. Count={count}. NextIdx={next_idx}. Tile={cvt.tid_to_mpsz(self.wall[next_idx])}"
-        )
+        # print(
+        #     f"DEBUG: REVEAL KAN DORA. post_rinshan={post_rinshan}. Count={count}. NextIdx={next_idx}. Tile={cvt.tid_to_mpsz(self.wall[next_idx])}"
+        # )
 
         if 0 <= next_idx < len(self.wall):
             new_dora_ind = self.wall[next_idx]

@@ -63,7 +63,7 @@ if logger.handlers:
             logger.removeHandler(handler)
 
 stream_handler = logging.StreamHandler()
-stream_handler.setLevel(logging.DEBUG)
+stream_handler.setLevel(logging.INFO)
 formatters = {
     logging.DEBUG: logging.Formatter(
         f"{bcolors.GREEN}%(asctime)s{bcolors.ENDC} | {bcolors.CYAN}%(levelname)s{bcolors.ENDC} - {bcolors.CYAN}%(message)s{bcolors.ENDC}",
@@ -88,7 +88,7 @@ formatters = {
 }
 stream_handler.setFormatter(LevelFormatter(formatters))
 logger.addHandler(stream_handler)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 
 def parse_args() -> argparse.Namespace:
@@ -225,7 +225,7 @@ class MjsoulEnvVerifier:
         # Riichi Step
         is_liqi = event["data"].get("is_liqi", False)
         if self._verbose:
-            print(f"DEBUG: Checking is_liqi. Value={is_liqi} Type={type(is_liqi)}")
+            logger.debug(f"DEBUG: Checking is_liqi. Value={is_liqi} Type={type(is_liqi)}")
             
         if is_liqi:
             if self._verbose:
@@ -240,9 +240,9 @@ class MjsoulEnvVerifier:
                 self.obs_dict = self.env.step({player_id: Action(ActionType.RIICHI)})
 
         if player_id == 0 and len(self.obs_dict[player_id].hand) < 13:
-             if self._verbose:
-                 print(f"DEBUG: Player 0 Hand Size Mismatch! Size= {len(self.obs_dict[player_id].hand)}")
-                 print(f"DEBUG: Player 0 Events: {self.obs_dict[player_id].events}")
+            if self._verbose:
+                logger.debug(f"DEBUG: Player 0 Hand Size Mismatch! Size= {len(self.obs_dict[player_id].hand)}")
+                logger.debug(f"DEBUG: Player 0 Events: {self.obs_dict[player_id].events}")
 
         # Discard Step
         # Manually construct action to ensure we use the target tile
@@ -565,6 +565,15 @@ class MjsoulEnvVerifier:
                 print(f"DEBUG: Riichi Declared Array: {self.env.riichi_declared}")
                 print(f"DEBUG: Player {player_id} Riichi: {self.env.riichi_declared[player_id]}")
 
+            # Determine tsumo_first_turn
+            # Tenhou/Chiihou condition:
+            # 1. Player has not discarded yet (len(discards) == 0).
+            # 2. No melds exist on the board (interrupts first turn).
+            # Note: Even Ankan breaks Tenhou/Chiihou because it replaces the draw.
+            has_discards = len(self.env.discards[player_id]) > 0
+            has_melds = sum(len(self.env.melds[p]) for p in range(4)) > 0
+            is_first_turn = (not has_discards) and (not has_melds)
+
             calc = AgariCalculator(hand_for_calc, self.env.melds[player_id]).calc(
                 winning_tile, 
                 dora_indicators=self.env.dora_indicators,
@@ -572,13 +581,13 @@ class MjsoulEnvVerifier:
                 conditions=Conditions(
                     tsumo=(action.type == ActionType.TSUMO),
                     riichi=self.env.riichi_declared[player_id],
-                    double_riichi=(18 in fan_ids), # 21 is Toitoi in MJSoul/Tenhou?
+                    double_riichi=(18 in fan_ids), 
                     ippatsu=(30 in fan_ids), 
                     haitei=(5 in fan_ids),
-                    houtei=(6 in fan_ids), # 11 observed as Houtei in MJSoul but also Round Wind? Removing 11 to fix mismatch.
+                    houtei=(6 in fan_ids),
                     rinshan=(4 in fan_ids),
                     chankan=(3 in fan_ids),
-                    tsumo_first_turn=False,
+                    tsumo_first_turn=is_first_turn,
                     player_wind=player_wind_val,
                     round_wind=round_wind,
             ))
@@ -797,6 +806,9 @@ class MjsoulEnvVerifier:
                                 action = Action(ActionType.KAKAN, tile=t, consume_tiles=[t])
                             if self._verbose:
                                 print(f">> EXECUTING KAKAN Action: {action}")
+                            # print(f">> ENV TYPE: {type(self.env)}")
+                            import sys
+                            sys.stdout.flush()
                             self.obs_dict = self.env.step({player_id: action})
                             if self._verbose:
                                 print(">> OBS (AFTER KAKAN)", self.obs_dict)
@@ -907,8 +919,8 @@ class MjsoulEnvVerifier:
             if 0 in self.obs_dict:
                 hand_size = len(self.obs_dict[0].hand)
                 if hand_size < 13 and hand_size > 0: # Filter out empty hands at start/end if any
-                     print(f"DEBUG: >> ALERT: Player 0 Hand Size DROP to {hand_size} after event {event['name']}")
-
+                    # print(f"DEBUG: >> ALERT: Player 0 Hand Size DROP to {hand_size} after event {event['name']}")
+                    pass
 
             return True
 
@@ -1085,7 +1097,6 @@ class MjsoulEnvVerifier:
             pass
 
 def main(path: str, skip: int = 0, verbose: bool = False) -> None:
-
     game = ReplayGame.from_json(path)
     logger.info(f"Verifying {path}...")
     verifier = MjsoulEnvVerifier(verbose=verbose)
