@@ -114,12 +114,9 @@ class MjsoulEnvVerifier:
         self.kyoku_idx = 0
 
     def verify_game(self, game: Any, skip: int = 0) -> bool:
-        # We start from the 5th kyoku as in the original script? 
-        # Original: for kyoku in list(game.take_kyokus())[4:]:
         kyokus = list(game.take_kyokus())
         for i, kyoku in enumerate(kyokus[skip:]):
             self.kyoku_idx = skip + i
-            # print(f"Processing Kyoku index {self.kyoku_idx} ...")
             if not self.verify_kyoku(kyoku):
                 return False
         return True
@@ -128,8 +125,6 @@ class MjsoulEnvVerifier:
         data = event["data"]
         assert "paishan" in data, "Paishan not found in NewRound event."
 
-        # Determine Wall
-        # Prefer paishan if available (contains full 136 tiles including Dead Wall)
         paishan_wall = None
         if "paishan" in data:
             try:
@@ -144,6 +139,12 @@ class MjsoulEnvVerifier:
         bakaze_idx = data.get("chang", 0)
         self.env.reset(oya=data["ju"] % 4, wall=paishan_wall, bakaze=bakaze_idx)
         self.dora_indicators = self.env.dora_indicators[:]
+
+        # 牌山から配牌を決定するロジックの一致を検証
+        assert cvt.tid_to_mjai_list(self.env.hands[0]) == cvt.tid_to_mjai_list(list(sorted(cvt.mpsz_to_tid_list(data["tiles0"][:13]))))
+        assert cvt.tid_to_mjai_list(self.env.hands[1]) == cvt.tid_to_mjai_list(list(sorted(cvt.mpsz_to_tid_list(data["tiles1"][:13]))))
+        assert cvt.tid_to_mjai_list(self.env.hands[2]) == cvt.tid_to_mjai_list(list(sorted(cvt.mpsz_to_tid_list(data["tiles2"][:13]))))
+        assert cvt.tid_to_mjai_list(self.env.hands[3]) == cvt.tid_to_mjai_list(list(sorted(cvt.mpsz_to_tid_list(data["tiles3"][:13]))))
 
         self.env.mjai_log = [
             {
@@ -166,33 +167,27 @@ class MjsoulEnvVerifier:
                 ],
             },
         ]
+        # 局数は self.env.oya と一致する
+        assert self.env.oya == data["ju"] % 4
+
+        # ju は 0-index なので +1 して 1-index にする（1局, 2局, ... と数える）
         self.env.kyoku_idx = data["ju"] + 1
         oya = data["ju"] % 4
 
-        # Convert ALL 14 tiles for Oya (at least) and 13 for others to ensure unique TIDs
-        for player_id in range(4):
-            num_tiles = 14 if player_id == oya else 13
-            tiles_mpsz = data[f"tiles{player_id}"][:num_tiles]
-            tids = cvt.mpsz_to_tid_list(tiles_mpsz)
-            
-            if player_id == oya:
-                self.env.hands[player_id] = tids[:13]
-                self.env.drawn_tile = tids[13]
-            else:
-                self.env.hands[player_id] = tids[:]
-            
+        # 最初の親のツモが RiichiEnv で設定したものとログが一致することを確認
+        assert cvt.tid_to_mjai(self.env.drawn_tile) == cvt.mpsz_to_mjai(data["tiles{}".format(oya)][13])
+
         first_actor = data["ju"]
-        raw_first_tile = data["tiles{}".format(first_actor)][13] # This is now redundant as drawn_tile is set above
-        first_tile = cvt.mpsz_to_mjai(raw_first_tile) # This is also redundant
         self.env.mjai_log.append({
             "type": "tsumo",
             "actor": first_actor,
-            "tile": first_tile,
+            "tile": cvt.tid_to_mjai(self.env.drawn_tile),
         })
-        # self.env.drawn_tile = cvt.mpsz_to_tid(raw_first_tile) # This is now redundant
-        self.env.current_player = first_actor
-        self.env.active_players = [first_actor]
+        assert self.env.current_player == first_actor
+        assert self.env.active_players == [first_actor]
+
         self.obs_dict = self.env._get_observations([first_actor])
+        assert self.obs_dict is not None
 
     def _discard_tile(self, event: Any) -> None:
         if self._verbose:
@@ -206,8 +201,6 @@ class MjsoulEnvVerifier:
                 print(f">> WAITING loop... obs keys: {list(self.obs_dict.keys())} Phase: {self.env.phase}")
             # Skip action
             self.obs_dict = self.env.step({skip_player_id: Action(ActionType.PASS) for skip_player_id in self.obs_dict.keys()})
-
-        # print(">> OBS (AFTER SKIP WAIT_ACT PHASE)", self.obs_dict)
 
         player_id = event["data"]["seat"]
         candidate_tiles = set([cvt.tid_to_mpsz(a.tile) for a in self.obs_dict[player_id].legal_actions() if a.type == ActionType.DISCARD])

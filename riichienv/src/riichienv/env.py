@@ -142,6 +142,7 @@ class RiichiEnv:
 
         # Round State
         self.oya: int = 0
+        self.kyoku_idx: int = 1
         self.dora_indicators: list[int] = []
         self.pending_kan_dora_count: int = 0
 
@@ -167,7 +168,7 @@ class RiichiEnv:
         self._rng = random.Random(self._seed)  # Reset RNG if seed was fixed? Or continue? Usually new seed or continue.
 
         self.oya = oya
-        self.kyoku_idx = 1  # Default, will be updated by verifier
+        self.kyoku_idx = oya + 1
         if bakaze is not None:
             self._custom_round_wind = bakaze
         self.dora_indicators = []
@@ -235,10 +236,16 @@ class RiichiEnv:
             {"type": "start_game", "names": ["Player0", "Player1", "Player2", "Player3"], "id": "local_game_0"}
         )
 
-        # Deal 13 tiles to each
-        for _ in range(13):
+        # 牌山からの配牌を再現する (oya = kyoku)
+        for _ in range(3):
             for pid in range(4):
-                self.hands[pid].append(self.wall.pop())
+                pid_ = (pid + self.oya) % 4
+                for _ in range(4):
+                    self.hands[pid_].append(self.wall.pop())
+
+        for pid in range(4):
+            pid_ = (pid + self.oya) % 4
+            self.hands[pid_].append(self.wall.pop())
 
         # Dealer draws 14th tile
         self.drawn_tile = self.wall.pop()
