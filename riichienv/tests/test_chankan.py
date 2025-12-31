@@ -12,23 +12,28 @@ class TestChankan:
 
         # Player 0: Performs KAKAN of 1m
         m1_tiles = [0, 1, 2]
-        env.hands[0] = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52] # Unrelated
+        env.hands[0] = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52]  # Unrelated
         env.melds[0] = [Meld(MeldType.Peng, tiles=m1_tiles, opened=True)]
-        env.drawn_tile = 3 # The 4th 1m
-        
+        env.drawn_tile = 3  # The 4th 1m
+
         # Player 1: Waits for 1m, has Red Dragon Pon for Yaku
         # Hand: 1m, 1m (4, 5) ...
         # Wait: 1m (Shanpon wait or similar)
         # Actually let's make it easy: 2m, 3m in hand, wait is 1m, 4m (Ryanmen).
         env.hands[1] = [
-            convert.mpsz_to_tid("2m"), convert.mpsz_to_tid("3m"),
-            convert.mpsz_to_tid("1p"), convert.mpsz_to_tid("1p"),
-            convert.mpsz_to_tid("2p"), convert.mpsz_to_tid("2p"),
-            convert.mpsz_to_tid("3p"), convert.mpsz_to_tid("3p"),
-            convert.mpsz_to_tid("4p"), convert.mpsz_to_tid("4p"),
+            convert.mpsz_to_tid("2m"),
+            convert.mpsz_to_tid("3m"),
+            convert.mpsz_to_tid("1p"),
+            convert.mpsz_to_tid("1p"),
+            convert.mpsz_to_tid("2p"),
+            convert.mpsz_to_tid("2p"),
+            convert.mpsz_to_tid("3p"),
+            convert.mpsz_to_tid("3p"),
+            convert.mpsz_to_tid("4p"),
+            convert.mpsz_to_tid("4p"),
         ]
         # 10 tiles + 3 in meld = 13.
-        env.melds[1] = [Meld(MeldType.Peng, tiles=[132, 133, 134], opened=True)] # Red Dragon
+        env.melds[1] = [Meld(MeldType.Peng, tiles=[132, 133, 134], opened=True)]  # Red Dragon
 
         env.current_player = 0
         env.phase = Phase.WAIT_ACT
@@ -42,7 +47,7 @@ class TestChankan:
         assert env.phase == Phase.WAIT_RESPONSE, f"Expected WAIT_RESPONSE, got {env.phase}"
         assert 1 in env.active_players
         assert 1 in obs_dict
-        
+
         # Player 1 should have RON action
         legal_actions = obs_dict[1].legal_actions()
         ron_actions = [a for a in legal_actions if a.type == ActionType.RON]
@@ -72,13 +77,18 @@ class TestChankan:
         env.hands[0] = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52]
         env.melds[0] = [Meld(MeldType.Peng, tiles=m1_tiles, opened=True)]
         env.drawn_tile = 3
-        
+
         env.hands[1] = [
-            convert.mpsz_to_tid("2m"), convert.mpsz_to_tid("3m"),
-            convert.mpsz_to_tid("1p"), convert.mpsz_to_tid("1p"),
-            convert.mpsz_to_tid("2p"), convert.mpsz_to_tid("2p"),
-            convert.mpsz_to_tid("3p"), convert.mpsz_to_tid("3p"),
-            convert.mpsz_to_tid("4p"), convert.mpsz_to_tid("4p"),
+            convert.mpsz_to_tid("2m"),
+            convert.mpsz_to_tid("3m"),
+            convert.mpsz_to_tid("1p"),
+            convert.mpsz_to_tid("1p"),
+            convert.mpsz_to_tid("2p"),
+            convert.mpsz_to_tid("2p"),
+            convert.mpsz_to_tid("3p"),
+            convert.mpsz_to_tid("3p"),
+            convert.mpsz_to_tid("4p"),
+            convert.mpsz_to_tid("4p"),
         ]
         env.melds[1] = [Meld(MeldType.Peng, tiles=[132, 133, 134], opened=True)]
 
@@ -111,13 +121,13 @@ class TestChankan:
         e_tiles = [108, 109, 110]
         env.hands[0] = e_tiles + [4, 8, 12, 16, 20, 24, 28, 32, 36, 40]
         env.drawn_tile = 111
-        
+
         # Player 1: Kokushi Musou waiting for 1z
         yaochu_mpsz = ["1m", "9m", "1p", "9p", "1s", "9s", "2z", "3z", "4z", "5z", "6z", "7z"]
         kokushi_tiles = [convert.mpsz_to_tid(m) for m in yaochu_mpsz]
         # Add a pair (e.g., 1m)
         kokushi_tiles.append(convert.mpsz_to_tid("1m") + 1)
-        env.hands[1] = sorted(kokushi_tiles) # 13 tiles, waiting for 1z (108-111)
+        env.hands[1] = sorted(kokushi_tiles)  # 13 tiles, waiting for 1z (108-111)
 
         env.current_player = 0
         env.phase = Phase.WAIT_ACT
@@ -130,7 +140,7 @@ class TestChankan:
         # Should transition to WAIT_RESPONSE for Player 1
         assert env.phase == Phase.WAIT_RESPONSE
         assert 1 in env.active_players
-        
+
         legal_actions = obs_dict[1].legal_actions()
         ron_actions = [a for a in legal_actions if a.type == ActionType.RON]
         assert len(ron_actions) > 0
@@ -153,11 +163,11 @@ class TestChankan:
         e_tiles = [108, 109, 110]
         env.hands[0] = e_tiles + [4, 8, 12, 16, 20, 24, 28, 32, 36, 40]
         env.drawn_tile = 111
-        
+
         # Player 1: Normal hand waiting for 1z (Shanpon), has Red Dragon Pon for Yaku
-        env.hands[1] = [112, 113, 116, 116, 120, 120, 124, 124, 128, 128] # Wait is 1z for Shanpon
+        env.hands[1] = [112, 113, 116, 116, 120, 120, 124, 124, 128, 128]  # Wait is 1z for Shanpon
         env.melds[1] = [Meld(MeldType.Peng, tiles=[132, 133, 134], opened=True)]
-        
+
         env.current_player = 0
         env.phase = Phase.WAIT_ACT
         env.active_players = [0]

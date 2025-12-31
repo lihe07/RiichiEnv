@@ -467,12 +467,12 @@ class RiichiEnv:
                     self.active_players = ronners
                     self.pending_kan = (self.current_player, action)
                     self.last_discard = {"seat": self.current_player, "tile": action.tile}
-                    
+
                     # Populate current_claims so Ron actions appear in observations
                     self.current_claims = {}
                     for pid in ronners:
                         self.current_claims.setdefault(pid, []).append(Action(ActionType.RON, tile=action.tile))
-                    
+
                     if os.environ.get("DEBUG"):
                         print(f"DEBUG: Chankan potential detected from {ronners}")
                     return self._get_observations(self.active_players)
@@ -949,7 +949,9 @@ class RiichiEnv:
 
                 self.current_player = claimer
                 self.drawn_tile = self.wall.pop(0)
-                self.mjai_log.append({"type": "tsumo", "actor": self.current_player, "tile": _to_mjai_tile(self.drawn_tile)})
+                self.mjai_log.append(
+                    {"type": "tsumo", "actor": self.current_player, "tile": _to_mjai_tile(self.drawn_tile)}
+                )
 
                 self.phase = Phase.WAIT_ACT
                 self.active_players = [self.current_player]
@@ -1538,7 +1540,7 @@ class RiichiEnv:
             p_wind = (pid - self.oya + 4) % 4
             # NOTE: カンをすると王牌から一枚引くので牌山は一枚減る。カンされた後でこの判定式で河底撈魚を扱えるかは後で要検討
             is_houtei = len(self.wall) <= 14
-            
+
             # Ankan Ron is only possible for Kokushi Musou
             # We will check this after Agari calculation.
 

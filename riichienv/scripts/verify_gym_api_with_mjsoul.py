@@ -398,97 +398,67 @@ class MjsoulEnvVerifier:
                     logger.debug(f"Mismatch in Han/Fu/Yakuman: Rust calc han={calc.han} fu={calc.fu} yakuman={calc.yakuman}, Expected count={hule['count']} fu={hule['fu']} yiman={hule.get('yiman', False)}")
                 raise e
 
+    def _deal_tile(self, event: Any) -> None:
+        # RiichiEnv 内部で処理されるので検証のみ
+        if "tile" in event["data"] and event["data"]["tile"] and event["data"]["tile"] != "?":
+            t_str = event["data"]["tile"]
+            t_tid = cvt.mpsz_to_tid(t_str)
+
+            # Check Simulator State
+            curr_player = self.env.current_player
+            # drawn_tile is usually set in self.env.drawn_tile
+            sim_drawn = self.env.drawn_tile
+            assert sim_drawn is not None, "Drawn tile is not set while Env is in WAIT_RESPONSE"
+            assert t_tid // 4 == sim_drawn // 4, "Drawn tile mismatch. Sim: {} Log: {}".format(cvt.tid_to_mpsz(sim_drawn), t_str)
+            assert t_str == cvt.tid_to_mpsz(sim_drawn), "Drawn tile mismatch. Sim: {} Log: {}".format(cvt.tid_to_mpsz(sim_drawn), t_str)
+        else:
+            logger.error(f"Draw tile is not set. Sim: {cvt.tid_to_mpsz(sim_drawn)}, Log: {t_str}.")
+            assert False, "Draw tile is not set while Env is in WAIT_RESPONSE"
+
     def verify_kyoku(self, kyoku: Any) -> bool:
         try:
             events = kyoku.events()
-
             for event in events:
-                # NOTE: カンによる新しいドラ表示牌の追加処理
-                # DiscardTile, DealTile event のみで発生する。共通処理としてここで処理
-                # 以下の処理の流れが理想
-                # - カンが発生した場合に適切なタイミングで牌山から RiichiEnv がドラ表示牌を追加
-                # - 牌山が初期化されているので、新ドラは自動的に決定できる
                 if event["name"] in ["DealTile", "DiscardTile"] and "doras" in event["data"]:
-                    # print(">> DORA", event["data"]["doras"], event["name"], cvt.tid_to_mpsz_list(self.env.dora_indicators))
                     # Always treat Log as authoritative for the LIST of doras (including duplicates)
                     log_doras = [cvt.mpsz_to_tid(d) for d in event["data"]["doras"]]
-
-                    if not self.using_paishan:
-                        # Legacy: Overwrite Env to match Log (handles duplicates like [1s, 1s])
-                        self.env.dora_indicators = log_doras[:]
-                        self.dora_indicators = log_doras[:]
-                    else:
-                        # Paishan: Env should have updated itself via Actions.
-                        # Verify consistency (counts).
-                        if len(self.env.dora_indicators) != len(log_doras):
-                            if self._verbose:
-                                logger.warning(f">> DORA COUNT MISMATCH: Env {len(self.env.dora_indicators)}, Log {len(log_doras)}")
-                            # Optional: We could force sync if we distrust Env, but we want to verify Env.
-                            # If count is less, Env missed a reveal?
-                            pass
+                    # assert len(self.env.dora_indicators) == len(log_doras)
 
                 # If Env is waiting for responses (Ron/Pon/Chi) but the Log event is not one of those,
                 # it means all players PASSed. We must synchronize the Env.
                 while self.env.phase == Phase.WAIT_RESPONSE and event["name"] not in ["Hule", "ChiPengGang", "AnGangAddGang"]:
                     pids = self.env.active_players
-                    if not pids:
-                         # This should not happen if phase is WAIT_RESPONSE, but safety first
-                         if self._verbose:
-                             print(f">> WARNING: WAIT_RESPONSE but active_players is empty! Force transition.")
-                         self.env.phase = Phase.WAIT_ACT # Emergency break
-                         break
-                    if self._verbose:
-                        print(f">> ENV WAIT_RESPONSE but LOG is {event['name']}. ISSUING PASS for {pids}")
+                    assert pids, "Active players is empty while Env is in WAIT_RESPONSE"
                     self.obs_dict = self.env.step({pid: Action(ActionType.PASS) for pid in pids})
 
                 match event["name"]:
                     case "NewRound":
                         self._new_round(kyoku, event)
+                        assert not self.env.done()
 
                     case "DiscardTile":
                         self._discard_tile(event)
 
-
                     case "DealTile":
-                        # NOTE: RiichiEnv 内部で処理されるので検証のみ
-                        if "tile" in event["data"] and event["data"]["tile"] and event["data"]["tile"] != "?":
-                            t_str = event["data"]["tile"]
-                            t_tid = cvt.mpsz_to_tid(t_str)
+                        self._deal_tile(event)
+                        assert not self.env.done()
 
-                            # Check Simulator State
-                            curr_player = self.env.current_player
-                            # drawn_tile is usually set in self.env.drawn_tile
-                            sim_drawn = self.env.drawn_tile
-                            
-                            if sim_drawn is not None:
-                                if sim_drawn // 4 != t_tid // 4:
-                                    logger.error(f"Draw tile mismatch. Sim: {cvt.tid_to_mpsz(sim_drawn)}, Log: {t_str}.")
-                                    return False
-                        else:
-                            logger.error(f"Draw tile is not set. Sim: {cvt.tid_to_mpsz(sim_drawn)}, Log: {t_str}.")
-                            return False
+                    case "Hule":
+                        self._hule(event)
+                        assert self.env.done()
 
                     case "LiuJu":
                         self._liuju(event)
+                        # assert self.env.done()
                         
                     case "NoTile":
                         # NOTE: 終了していることが妥当。あとで実装を検討する
                         # NoTile usually implies Ryukyoku (Exhaustive Draw)
                         # assert self.env.done()
-                        if not self.env.done():
-                            if self._verbose:
-                                print(event)
-                                logger.warning(">> WARNING: Log says NoTile but Env is not done")
-
-                    case "Hule":
-                        self._hule(event)
+                        pass
 
                     case "AnGangAddGang":
                         # Ensure we are in WAIT_ACT for self-actions (Ankan/Kakan)
-                        if self._verbose:
-                            print(f">> AnGangAddGang Check Phase: {self.env.phase}")
-
-                        # Phase.WAIT_ACT でなく副露ができる場合、キャンセルしていることが記録から判断される。すべてスキップする                        
                         while self.env.phase != Phase.WAIT_ACT:
                             # Skip action (Pass on claims)
                             self.obs_dict = self.env.step({skip_player_id: Action(ActionType.PASS) for skip_player_id in self.obs_dict.keys()})
