@@ -533,18 +533,14 @@ class MjsoulEnvVerifier:
                                     break
 
                             assert action is not None, "ANKAN action should be included in obs.legal_actions()"
-                            # action = Action(ActionType.ANKAN, tile=consumed_tids[0], consume_tiles=consumed_tids)
-
                             if self._verbose:
                                 print(f">> EXECUTING ANKAN Action: {action}")
 
                             self.obs_dict = self.env.step({player_id: action})
                             if self._verbose:
                                 print(">> OBS (AFTER ANKAN)", self.obs_dict)
-                            pass
                         else:
-                            if self._verbose:
-                                print("UNHANDLED AnGangAddGang", event)
+                            assert False, "UNHANDLED AnGangAddGang"
 
                     case "ChiPengGang":
                         player_id = event["data"]["seat"]
@@ -553,8 +549,6 @@ class MjsoulEnvVerifier:
 
                     case _:
                         logger.error("UNHANDLED Event: {}".format(json.dumps(event)))
-                        if self._verbose:
-                            print(">>>OBS", self.obs_dict)
                         assert False, f"UNHANDLED Event: {event}"
 
             return True

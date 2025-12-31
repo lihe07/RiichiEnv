@@ -181,3 +181,46 @@ class TestChankan:
         assert len(env.melds[0]) == 1
         assert env.melds[0][0].meld_type == MeldType.Angang
         assert env.drawn_tile is not None
+
+    def test_ankan_generation(self):
+        """
+        Verify that ANKAN action is generated in the legal actions list.
+        """
+        env = RiichiEnv(seed=42)
+        env.reset()
+
+        # Setup: P0 has 3x 1m and draws the 4th
+        env.hands[0] = [0, 1, 2] + list(range(12, 12 + 10))
+        env.drawn_tile = 3
+        env.active_players = [0]
+        env.current_player = 0
+        env.phase = Phase.WAIT_ACT
+
+        obs = env._get_observations([0])[0]
+        legals = obs.legal_actions()
+        ankan = [a for a in legals if a.type == ActionType.ANKAN]
+        assert len(ankan) > 0
+        assert ankan[0].tile in [0, 1, 2, 3]
+        assert sorted(ankan[0].consume_tiles) == [0, 1, 2, 3]
+
+    def test_ankan_generation_riichi(self):
+        """
+        Verify that ANKAN action is generated even after Riichi declaration.
+        """
+        env = RiichiEnv(seed=42)
+        env.reset()
+
+        # Setup: P0 has 3x 1m and draws the 4th
+        env.hands[0] = [0, 1, 2] + list(range(12, 12 + 10))
+        env.drawn_tile = 3
+        env.active_players = [0]
+        env.current_player = 0
+        env.phase = Phase.WAIT_ACT
+        env.riichi_declared[0] = True
+
+        obs = env._get_observations([0])[0]
+        legals = obs.legal_actions()
+        ankan = [a for a in legals if a.type == ActionType.ANKAN]
+        assert len(ankan) > 0
+        assert ankan[0].tile == 3  # In Riichi, must be the drawn tile
+        assert sorted(ankan[0].consume_tiles) == [0, 1, 2, 3]

@@ -1118,7 +1118,22 @@ class RiichiEnv:
 
             if self.riichi_declared[pid]:
                 # Already in Riichi.
-                # Can only Tsumo or Discard Drawn Tile.
+                # Can only Tsumo, Ankan (if no change in wait), or Discard Drawn Tile.
+
+                # Ankan Check (Lenient: allow if matches triplet in hand and not part of wait)
+                if self.drawn_tile is not None and len(self.wall) > 14:
+                    hand_14 = hand + [self.drawn_tile]
+                    counts = {}
+                    for t in hand_14:
+                        t_type = t // 4
+                        counts[t_type] = counts.get(t_type, 0) + 1
+                    for t_type, count in counts.items():
+                        if count == 4:
+                            tids = sorted([t for t in hand_14 if t // 4 == t_type])
+                            # In most rules, Ankan after Riichi MUST use the drawn tile
+                            if self.drawn_tile in tids:
+                                actions.append(Action(ActionType.ANKAN, tile=self.drawn_tile, consume_tiles=tids))
+
                 # Tsumo check
                 if self.drawn_tile is not None:
                     hand_13 = hand[:]  # drawn_tile not in self.hands yet
@@ -1211,24 +1226,27 @@ class RiichiEnv:
                 if candidates:
                     actions.append(Action(ActionType.RIICHI))
 
-            # Kakan Check (Added Kan)
-            # Must not be Riichi (unless special rule? usually Kakan after Riichi is restricted).
-            # We assume Kakan allowed if not Riichi. If Riichi, handled separately?
-            # Actually, Kakan AFTER Riichi is allowed only if it doesn't change wait.
-            # For simplicity, let's allow Kakan in normal state here.
-            # Logic: Iterate melds. If Pon exists, check if we have the 4th tile in hand.
-            if not self.riichi_declared[pid]:
+            # Kan Check (Kakan & Ankan)
+            if not self.riichi_declared[pid] and len(self.wall) > 14:
+                # Kakan
                 for m in self.melds.get(pid, []):
                     if m.meld_type == MeldType.Peng:
-                        # Check if we have the 4th tile
-                        # m.tiles[0] // 4 is the type
+                        # Check if we have the 4th tile in hand
                         target_type = m.tiles[0] // 4
                         for t in hand:
                             if t // 4 == target_type:
-                                # Found match
                                 actions.append(Action(ActionType.KAKAN, tile=t, consume_tiles=[t]))
-                                # Does allow multiple Kakan if multiple tiles of same type? (e.g. Red vs Normal)
-                                # Usually yes.
+
+                # Ankan
+                counts = {}
+                for t in hand:
+                    t_type = t // 4
+                    counts[t_type] = counts.get(t_type, 0) + 1
+                for t_type, count in counts.items():
+                    if count == 4:
+                        tids = sorted([t for t in hand if t // 4 == t_type])
+                        # Anyone of these can be the "tile" for the action
+                        actions.append(Action(ActionType.ANKAN, tile=tids[0], consume_tiles=tids))
 
         elif self.phase == Phase.WAIT_RESPONSE:
             # pid is claiming discard
