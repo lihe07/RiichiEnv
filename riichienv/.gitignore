@@ -4,3 +4,4 @@ target
 trunk
 *.txt
 data
+*.log

@@ -1,3 +1,4 @@
+import os
 import hashlib
 import random
 from dataclasses import dataclass, field
@@ -143,6 +144,11 @@ class RiichiEnv:
         self.dora_indicators: list[int] = []
         self.pending_kan_dora_count: int = 0
 
+        # Yaku tracking
+        self.ippatsu_eligible: list[bool] = [False, False, False, False]
+        self.double_riichi_declared: list[bool] = [False, False, False, False]
+        self.is_rinshan_flag: bool = False
+
         # Security
         self.wall_digest: str = ""
         self.salt: str = ""
@@ -154,13 +160,27 @@ class RiichiEnv:
 
         # Current logic state
         self.drawn_tile: int | None = None  # The tile currently drawn by current_player
+        self._verbose: bool = False
 
-    def reset(self, oya: int = 0, wall: list[int] | None = None) -> dict[int, Observation]:
+    def reset(self, oya: int = 0, wall: list[int] | None = None, bakaze: int | None = None) -> dict[int, Observation]:
         self._rng = random.Random(self._seed)  # Reset RNG if seed was fixed? Or continue? Usually new seed or continue.
 
         self.oya = oya
+        self.kyoku_idx = 1  # Default, will be updated by verifier
+        if bakaze is not None:
+            self._custom_round_wind = bakaze
         self.dora_indicators = []
         self.pending_kan_dora_count = 0  # Track count of Kakan Doras to reveal
+
+        # Yaku tracking
+        self.ippatsu_eligible = [False] * 4
+        self.double_riichi_declared = [False] * 4
+        self.is_rinshan_flag = False
+
+        # Store Agari results for verification
+        # Key: player_id, Value: Agari object from Rust
+        self.agari_results = {}
+        self._verbose = False  # Default
 
         # Initialize tiles
         if wall is not None:
@@ -203,9 +223,9 @@ class RiichiEnv:
         self.riichi_declared = [False, False, False, False]
         self.is_done = False
         self.turn_count = 0
-        self.current_player = 0  # Dealer = 0 (East)
+        self.current_player = self.oya
         self.phase = Phase.WAIT_ACT
-        self.active_players = [0]
+        self.active_players = [self.oya]
         self.current_claims = {}
 
         self.last_discard = None
@@ -239,17 +259,17 @@ class RiichiEnv:
         start_kyoku_event = {
             "type": "start_kyoku",
             "bakaze": "E" if self._custom_round_wind == 0 else "S",  # TODO: Proper wind mapping
-            "kyoku": 1,
+            "kyoku": self.oya + 1,
             "honba": self._custom_honba,
-            "kyotaku": self._custom_kyotaku,
-            "oya": 0,
+            "kyotaku": self.riichi_sticks,
+            "oya": self.oya,
             "dora_marker": _to_mjai_tile(self.dora_indicators[0]),
             "tehais": tehais,
         }
         self.mjai_log.append(start_kyoku_event)
 
         # Tsumo Event for Dealer
-        tsumo_event = {"type": "tsumo", "actor": 0, "tile": _to_mjai_tile(self.drawn_tile)}
+        tsumo_event = {"type": "tsumo", "actor": self.oya, "tile": _to_mjai_tile(self.drawn_tile)}
         self.mjai_log.append(tsumo_event)
 
         return self._get_observations(self.active_players)  # Start state
@@ -263,6 +283,8 @@ class RiichiEnv:
         Execute one step.
         actions: Map from player_id to Action.
         """
+        self.agari_results = {}
+
         if self.is_done:
             return self._get_observations([])
 
@@ -270,7 +292,15 @@ class RiichiEnv:
         # Note: We need to handle set comparison because order might differ in dict (though usually not an issue)
         required_players = set(self.active_players)
         provided_players = set(actions.keys())
-        if required_players != provided_players:
+        if os.environ.get("DEBUG"):
+            print(
+                f"DEBUG: step() called with actions from {list(actions.keys())}. current active_players={self.active_players}, phase={self.phase}"
+            )
+        if set(actions.keys()) != set(self.active_players):
+            if os.environ.get("DEBUG"):
+                print(
+                    f"DEBUG: VALUE ERROR MISMATCH! active_players={self.active_players}, got={list(actions.keys())}, phase={self.phase}"
+                )
             raise ValueError(f"Actions required from {self.active_players}, but got {list(actions.keys())}")
 
         # Convert raw dict/int to Action objects if needed
@@ -325,9 +355,66 @@ class RiichiEnv:
                     hand_13.remove(self.drawn_tile)
 
                 player_melds = self.melds.get(self.current_player, [])
-                # 0=East, 1=South, 2=West, 3=North (relative to dealer 0). In simulator pid=wind usually.
-                cond = Conditions(tsumo=True, player_wind=self.current_player, round_wind=self._custom_round_wind)
-                res = AgariCalculator(hand_13, player_melds).calc(self.drawn_tile, conditions=cond)
+
+                # Check Conditions
+                is_riichi = self.riichi_declared[self.current_player]
+                # Double Riichi check (approximate: First turn + Riichi).
+                # (Accurate check requires tracking if Riichi was on first turn. Assuming yaku.rs logic?
+                # No, Conditions needs to tell yaku.rs. For now, check discards length?)
+                # Actually, riichi_declared is boolean.
+                # Checking 'is_tsumo_first_turn' requires logic.
+                has_discards = len(self.discards[self.current_player]) == 0
+                has_melds = sum(len(m) for m in self.melds.values()) > 0
+                is_first_turn = has_discards and not has_melds
+
+                is_double_riichi = is_riichi and is_first_turn  # Simplification.
+                # Real double riichi: Declared on first turn.
+                # If we are here at Tsumo, we might have declared riichi previously?
+                # No, Tsumo happens on *draw*. Riichi happens on *discard*.
+                # Tsumo cannot *be* a Riichi declaration turn (unless Chankan?).
+                # So Double Riichi applies if the *previous* declaration was Double.
+                # We need to track if the Riichi was Double.
+                # Let's ignore Double Riichi precise tracking for now (default False) or rely on `is_riichi and len(discards)==0`?
+                # If len(discards)==0, we haven't discarded yet.
+                # But we can't Reach and Tsumo same turn?
+                # Actually we can Reach, pass, then Tsumo later? NO. Reach is a discard.
+                # So Tsumo *always* implies len(discards) >= 1 (if Reached).
+                # So 'is_first_turn' logic here is for Tenhou.
+
+                # Prepare Dora/Ura (TIDs)
+                ura_indicators_tid = []
+                if is_riichi:
+                    ura_indicators_tid = self._get_ura_markers_tid()
+
+                cond = Conditions(
+                    tsumo=True,
+                    riichi=is_riichi,
+                    double_riichi=self.double_riichi_declared[self.current_player],
+                    ippatsu=self.ippatsu_eligible[self.current_player],
+                    rinshan=self.is_rinshan_flag,
+                    haitei=(len(self.wall) == 14 and not self.is_rinshan_flag),
+                    tsumo_first_turn=is_first_turn,
+                    player_wind=(self.current_player - self.oya + 4) % 4,
+                    round_wind=self._custom_round_wind,
+                )
+                if os.environ.get("DEBUG"):
+                    print(
+                        f"DEBUG: Kyoku {getattr(self, 'kyoku_idx', '?')} - Tsumo Check (step) for pid {self.current_player} on tile {self.drawn_tile} ({cvt.tid_to_mpsz(self.drawn_tile)})"
+                    )
+                res = AgariCalculator(hand_13, player_melds).calc(
+                    self.drawn_tile,
+                    dora_indicators=self.dora_indicators,
+                    ura_indicators=ura_indicators_tid,
+                    conditions=cond,
+                )
+                if os.environ.get("DEBUG"):
+                    print(
+                        f"DEBUG: Kyoku {getattr(self, 'kyoku_idx', '?')} - Tsumo Result (step) for pid {self.current_player}: agari={res.agari}"
+                    )
+                self.agari_results[self.current_player] = res
+
+                # Consume Rinshan flag
+                self.is_rinshan_flag = False
 
                 deltas = self._calculate_deltas(res, self.current_player, is_tsumo=True)
 
@@ -340,9 +427,9 @@ class RiichiEnv:
                     "deltas": deltas,
                 }
 
-                # Check for Riichi to add ura markers
+                # Check for Riichi to add ura markers (MJAI strings)
                 if self.riichi_declared[self.current_player]:
-                    hora_event["ura_markers"] = self._get_ura_markers()
+                    hora_event["ura_markers"] = [_to_mjai_tile(t) for t in ura_indicators_tid]
 
                 self.mjai_log.append(hora_event)
                 self.mjai_log.append({"type": "end_kyoku"})
@@ -370,7 +457,11 @@ class RiichiEnv:
                 if self.drawn_tile is not None:
                     self.hands[self.current_player].append(self.drawn_tile)
                     self.drawn_tile = None
-                    self.hands[self.current_player].sort()
+                self.hands[self.current_player].sort()
+
+                # Update Flags
+                self.is_rinshan_flag = True
+                self.ippatsu_eligible = [False] * 4  # Kan breaks Ippatsu
 
                 self._execute_claim(self.current_player, action)
 
@@ -391,28 +482,45 @@ class RiichiEnv:
 
             elif action.type == ActionType.DISCARD:
                 discard_tile_id = action.tile
+                if os.environ.get("DEBUG"):
+                    print(
+                        f"DEBUG: HANDLING DISCARD seat {self.current_player} tile {discard_tile_id} ({cvt.tid_to_mpsz(discard_tile_id)})"
+                    )
+
+                # Consume Rinshan later (after Ron check)
+                # self.is_rinshan_flag = False
 
                 # Check Riichi Stage
+                is_reach_declaration = False
                 if hasattr(self, "riichi_stage") and self.riichi_stage[self.current_player]:
                     # Must be a valid riichi candidate
-                    # (Double check validity here or trust legal_actions filter above? Better to verify)
-                    # For performance, maybe skip re-check if assuming agent follows legal_actions.
-                    # But enforcing rules is good.
-                    # Let's rely on _get_legal_actions returning only valid ones, so if user sends invalid, it would fail `legal_actions` check if we enabled strict checking?
-                    # Currently step() doesn't strictly validate against legal_actions (it validates required_players keys).
+                    # ...
                     pass
 
                     # Commit Riichi
                     self.riichi_stage[self.current_player] = False
                     self.riichi_declared[self.current_player] = True
+                    is_reach_declaration = True
 
                     # Deduct Score
                     self.scores[self.current_player] -= 1000
-                    self.riichi_sticks += 1
+                    # Enable Ippatsu
+                    self.ippatsu_eligible[self.current_player] = True
+                    # Deduct Score
+                    self.scores[self.current_player] -= 1000
+                    # Enable Ippatsu
+                    self.ippatsu_eligible[self.current_player] = True
 
-                    # Log Reach Payment
-                    # Actually MJAI order: Dahai (with reach=true) -> Reach (score update)
-                    # We will handle Dahai logging below, but need to pass flag.
+                    # Check Double Riichi
+                    # Condition: First discard and no melds on board
+                    has_prior_discards = len(self.discards[self.current_player]) > 0
+                    has_melds = sum(len(m) for m in self.melds.values()) > 0
+                    if not has_prior_discards and not has_melds:
+                        self.double_riichi_declared[self.current_player] = True
+
+                # If discarding and already reached (and NOT just declared), Ippatsu expires
+                if self.riichi_declared[self.current_player] and not is_reach_declaration:
+                    self.ippatsu_eligible[self.current_player] = False
 
             # Execute discard
             # Remove from hand
@@ -548,19 +656,26 @@ class RiichiEnv:
                 # player_wind: (pid - oya + 4) % 4
                 p_wind = (pid - self.oya + 4) % 4
                 # NOTE: カンをすると王牌から一枚引くので牌山は一枚減る。カンされた後でこの判定式で河底撈魚を扱えるかは後で要検討
-                is_houtei = len(self.wall) <= 14  # Win on discard when wall is empty (14 dead tiles)
-
+                is_houtei = len(self.wall) <= 14
+                if os.environ.get("DEBUG"):
+                    print(
+                        f"DEBUG: Kyoku {getattr(self, 'kyoku_idx', '?')} - Ron Check for pid {pid} on tile {discard_tile_id} ({cvt.tid_to_mpsz(discard_tile_id)}) wall={len(self.wall)} is_houtei={is_houtei} rinshan={self.is_rinshan_flag}"
+                    )
                 res = AgariCalculator(self.hands[pid], self.melds.get(pid, [])).calc(
                     discard_tile_id,
                     dora_indicators=self.dora_indicators,
                     conditions=Conditions(
                         tsumo=False,
                         riichi=self.riichi_declared[pid],
+                        double_riichi=self.double_riichi_declared[pid],
+                        ippatsu=self.ippatsu_eligible[pid],
                         player_wind=p_wind,
                         round_wind=self._custom_round_wind,
                         houtei=is_houtei,
                     ),
                 )
+                if os.environ.get("DEBUG"):
+                    print(f"DEBUG: Kyoku {getattr(self, 'kyoku', '?')} - Ron Result for pid {pid}: agari={res.agari}")
                 if res.agari:
                     ron_potential.append(pid)
                     self.current_claims.setdefault(pid, []).append(Action(ActionType.RON, tile=discard_tile_id))
@@ -598,6 +713,8 @@ class RiichiEnv:
                 self.phase = Phase.WAIT_RESPONSE
                 self.active_players = list(self.current_claims.keys())
                 self.active_players.sort()  # generic order
+                if os.environ.get("DEBUG"):
+                    print(f"DEBUG: STEP(DISCARD) -> Claims detected. active_players={self.active_players}")
 
                 return self._get_observations(self.active_players)
 
@@ -610,6 +727,7 @@ class RiichiEnv:
                 self.mjai_log.append({"type": "end_game"})
                 return self._get_observations([])
 
+            self.is_rinshan_flag = False
             self.drawn_tile = self.wall.pop()
             # Log Tsumo
             tsumo_event = {"type": "tsumo", "actor": self.current_player, "tile": _to_mjai_tile(self.drawn_tile)}
@@ -617,6 +735,8 @@ class RiichiEnv:
 
             self.phase = Phase.WAIT_ACT
             self.active_players = [self.current_player]
+            if os.environ.get("DEBUG"):
+                print(f"DEBUG: STEP(DISCARD) -> No claims. Next player={self.current_player}")
 
             return self._get_observations(self.active_players)
 
@@ -643,36 +763,106 @@ class RiichiEnv:
                 # Assuming Head Bump (Atamahane) for now or double ron.
                 # Let's implement Atamahane: Start from current_player, find first ronner.
 
-                winner = -1
+                # Sort ronners by turn order for Riichi sticks/Head Bump priority (if needed rules, but MJSoul likely distributes Kyotaku to first)
+                sorted_ronners = []
                 for i in range(1, 4):
                     p = (self.current_player + i) % 4
                     if p in ronners:
-                        winner = p
-                        break
+                        sorted_ronners.append(p)
 
-                # Calculate scores
+                # Check tile
                 if self.last_discard is None:
                     raise RuntimeError("Winner on Ron but last_discard is None")
                 tile = self.last_discard["tile"]
-                cond = Conditions(tsumo=False, player_wind=winner, round_wind=self._custom_round_wind)
-                res = AgariCalculator(self.hands[winner], self.melds.get(winner, [])).calc(tile, conditions=cond)
-                deltas = self._calculate_deltas(res, winner, is_tsumo=False, loser=self.current_player)
 
-                self.is_done = True
-                hora_event = {
-                    "type": "hora",
-                    "actor": winner,
-                    "target": self.current_player,
-                    "tile": _to_mjai_tile(self.last_discard["tile"]),
-                    "deltas": deltas,
-                    # "yakus": ... TODO
-                }
+                # Process each winner
+                first_winner = True
+                for winner in sorted_ronners:
+                    # Check Conditions
+                    is_riichi = self.riichi_declared[winner]
+                    has_discards = len(self.discards[winner]) == 0
+                    has_melds = sum(len(m) for m in self.melds.values()) > 0
+                    is_first_turn = has_discards and not has_melds
 
-                # Check for Riichi to add ura markers
-                if self.riichi_declared[winner]:
-                    hora_event["ura_markers"] = self._get_ura_markers()
+                    cond = Conditions(
+                        tsumo=False,
+                        riichi=self.riichi_declared[winner],
+                        double_riichi=self.double_riichi_declared[winner],
+                        ippatsu=self.ippatsu_eligible[winner],
+                        player_wind=(winner - self.oya + 4) % 4,
+                        haitei=False,
+                        houtei=(len(self.wall) <= 14),
+                        chankan=False,
+                        tsumo_first_turn=is_first_turn,
+                        round_wind=self._custom_round_wind,
+                    )
 
-                self.mjai_log.append(hora_event)
+                    # Prepare Dora/Ura
+                    ura_indicators_tid = []
+                    if is_riichi:
+                        ura_indicators_tid = self._get_ura_markers_tid()
+
+                    res = AgariCalculator(self.hands[winner], self.melds.get(winner, [])).calc(
+                        tile, dora_indicators=self.dora_indicators, ura_indicators=ura_indicators_tid, conditions=cond
+                    )
+                    self.agari_results[winner] = res
+
+                    # Kyotaku only to first winner (Atamahane rule usually)
+                    # Use custom flag or logic? Or is it MJSoul logic?
+                    # RiichiEnv calculates deltas. For double ron, usually first winner gets kyotaku.
+                    # We can handle this by temporarily zeroing kyoutaku in env after first winner?
+                    # Or modify `_calculate_deltas` to accept kyoutaku override?
+                    # For now: Just calculate normally. `_calculate_deltas` likely uses `self.kyotaku`.
+                    # We should probably clear `self.kyotaku` after first winner calculation if we want precise score matching.
+
+                    # Note: `_calculate_deltas` reads `self.kyotaku`.
+                    # If we call it multiple times, we might double count kyotaku if we don't clear it.
+                    # Let's save original kyotaku.
+
+                    if not first_winner:
+                        # Hack: temporarily set kyotaku to 0 for subsequent winners?
+                        # Or better: `_calculate_deltas` should take kyotaku as arg.
+                        # Looking at `_calculate_deltas` signature (lines 1200+):
+                        # It uses `self.kyotaku` internally.
+                        # So we must modify `self.kyotaku`.
+                        pass
+
+                    # Actually, let's just do it.
+                    if first_winner:
+                        # Let `_calculate_deltas` take kyotaku.
+                        pass
+                    else:
+                        # Ensure no kyotaku output for second winner?
+                        # Or just set self.kyotaku = 0 after first?
+                        pass
+
+                    deltas = self._calculate_deltas(res, winner, is_tsumo=False, loser=self.current_player)
+                    if first_winner and self.riichi_sticks > 0:
+                        self.riichi_sticks = 0  # Claimed by first winner
+
+                    self.is_done = True
+                    hora_event = {
+                        "type": "hora",
+                        "actor": winner,
+                        "target": self.current_player,
+                        "tile": _to_mjai_tile(self.last_discard["tile"]),
+                        "deltas": deltas,
+                    }
+
+                    # Check for Riichi to add ura markers
+                    if self.riichi_declared[winner]:
+                        hora_event["ura_markers"] = [_to_mjai_tile(t) for t in ura_indicators_tid]
+
+                    self.mjai_log.append(hora_event)
+                    first_winner = False
+
+                self.mjai_log.append({"type": "end_kyoku"})
+                self.mjai_log.append({"type": "end_game"})
+
+                # Reset Rinshan flag
+                self.is_rinshan_flag = False
+
+                return self._get_observations([])
                 # rewards logic...
                 # Note: Currently verification script checks 'end_game' type.
                 # step (WAIT_ACT -> Ryukyoku) logs 'end_game'.
@@ -691,6 +881,10 @@ class RiichiEnv:
 
                 # Execute Meld
                 self._execute_claim(claimer, action)
+                self.is_rinshan_flag = False
+
+                # Any call breaks Ippatsu for everyone
+                self.ippatsu_eligible = [False] * 4
 
                 # Turn moves to claimer
                 self.current_player = claimer
@@ -706,6 +900,7 @@ class RiichiEnv:
                         self.mjai_log.append({"type": "end_game"})
                         return self._get_observations([])
 
+                    self.is_rinshan_flag = True
                     self.drawn_tile = self.wall.pop(0)
                     # Log Tsumo (Rinshan)
                     tsumo_event = {
@@ -725,6 +920,10 @@ class RiichiEnv:
                 action = valid_actions[claimer]
 
                 self._execute_claim(claimer, action)
+                self.is_rinshan_flag = False
+
+                # Any call breaks Ippatsu for everyone
+                self.ippatsu_eligible = [False] * 4
 
                 self.current_player = claimer
                 self.phase = Phase.WAIT_ACT
@@ -739,6 +938,7 @@ class RiichiEnv:
             self.active_players = [self.current_player]
 
             if len(self.wall) > 14:
+                self.is_rinshan_flag = False
                 self.drawn_tile = self.wall.pop()
                 # Log Tsumo
                 tsumo_event = {"type": "tsumo", "actor": self.current_player, "tile": _to_mjai_tile(self.drawn_tile)}
@@ -899,9 +1099,27 @@ class RiichiEnv:
                     hand_13 = hand[:]  # drawn_tile not in self.hands yet
                     # check tsumo
                     player_melds = self.melds.get(pid, [])
-                    res = AgariCalculator(hand_13, player_melds).calc(
-                        self.drawn_tile, conditions=Conditions(tsumo=True, riichi=True)
+                    is_first_turn = not has_discarded and not any_call
+                    cond = Conditions(
+                        tsumo=True,
+                        riichi=self.riichi_declared[pid],
+                        double_riichi=self.double_riichi_declared[pid],
+                        ippatsu=self.ippatsu_eligible[pid],
+                        player_wind=(pid - self.oya + 4) % 4,
+                        round_wind=self._custom_round_wind,
+                        haitei=(len(self.wall) == 14 and not self.is_rinshan_flag),
+                        tsumo_first_turn=is_first_turn,
+                        rinshan=self.is_rinshan_flag,
                     )
+                    if os.environ.get("DEBUG"):
+                        print(
+                            f"DEBUG: Kyoku {getattr(self, 'kyoku_idx', '?')} - Tsumo Check (LA) for pid {pid} on tile {self.drawn_tile} ({cvt.tid_to_mpsz(self.drawn_tile)})"
+                        )
+                    res = AgariCalculator(hand_13, player_melds).calc(self.drawn_tile, conditions=cond)
+                    if os.environ.get("DEBUG"):
+                        print(
+                            f"DEBUG: Kyoku {getattr(self, 'kyoku_idx', '?')} - Tsumo Result (LA) for pid {pid}: agari={res.agari}"
+                        )
                     if res.agari:
                         actions.append(Action(ActionType.TSUMO))
 
@@ -923,7 +1141,27 @@ class RiichiEnv:
                 hand_13 = self.hands[pid][:]  # Use original 13
 
                 player_melds = self.melds.get(pid, [])
-                res = AgariCalculator(hand_13, player_melds).calc(self.drawn_tile, conditions=Conditions(tsumo=True))
+                is_first_turn = not has_discarded and not any_call
+                cond = Conditions(
+                    tsumo=True,
+                    riichi=self.riichi_declared[pid],
+                    double_riichi=self.double_riichi_declared[pid],
+                    ippatsu=self.ippatsu_eligible[pid],
+                    player_wind=(pid - self.oya + 4) % 4,
+                    round_wind=self._custom_round_wind,
+                    haitei=(len(self.wall) == 14 and not self.is_rinshan_flag),
+                    tsumo_first_turn=is_first_turn,
+                    rinshan=self.is_rinshan_flag,
+                )
+                if os.environ.get("DEBUG"):
+                    print(
+                        f"DEBUG: Kyoku {getattr(self, 'kyoku_idx', '?')} - Tsumo Check (LA) for pid {pid} on tile {self.drawn_tile} ({cvt.tid_to_mpsz(self.drawn_tile)})"
+                    )
+                res = AgariCalculator(hand_13, player_melds).calc(self.drawn_tile, conditions=cond)
+                if os.environ.get("DEBUG"):
+                    print(
+                        f"DEBUG: Kyoku {getattr(self, 'kyoku_idx', '?')} - Tsumo Result (LA) for pid {pid}: agari={res.agari}"
+                    )
                 if res.agari:
                     actions.append(Action(ActionType.TSUMO))
 
@@ -1289,50 +1527,23 @@ class RiichiEnv:
             dora_event = {"type": "dora", "dora_marker": _to_mjai_tile(new_dora_ind)}
             self.mjai_log.append(dora_event)
 
-    def _get_ura_markers(self) -> list[str]:
+    def _get_ura_markers_tid(self) -> list[int]:
         """
-        Return ura dora markers from the wall.
-        Indices correspond to Dora Indicators but +1 (Bottom of stack).
-        Dora Indices (Omote): 4, 6, 8... (in original space)
-        Ura Indices: 5, 7, 9... (in original space)
-
-        So Ura is ALWAYS Omote + 1.
+        Return ura dora markers from the wall as TIDs (integers).
         """
         ura_markers = []
-        # We iterate through known dora indicators.
-        # But `self.dora_indicators` contains values, not indices.
-        # We must re-calculate current indices in `self.wall`.
-
-        # NOTE: This implies we must know how many Rinshans occurred (shifts).
-        # Loop i from 0 to len(dora)-1.
-        # i=0 (Initial): Shift=?
-        # We need check if shifts affect ALL indices uniformly?
-        # Yes, `pop(0)` removes from head, shifting EVERYTHING to left.
-        #
-        # So Current Index = Original Index - Total Shifts.
-        # Total Shifts = Current number of Kans?
-        # No, depends on WHEN the dora was added?
-        # No, `self.wall` is the LIVE current state.
-        # So we just need the CURRENT index of that tile.
-        #
-        # Can we find `dora_ind` in `self.wall`?
-        # `self.wall.index(dora_val)`?
-        # Yes, tiles are unique (IDs 0..135).
-        # So we can just find the Omote Dora, and take `index + 1`.
-        #
-        # Is Ura always `index + 1`?
-        # Original: Omote=4, Ura=5.
-        # Shifted: Omote=3, Ura=4.
-        # Yes, relative order is preserved.
-
         for dora_val in self.dora_indicators:
             try:
                 idx = self.wall.index(dora_val)
                 ura_idx = idx + 1
                 if ura_idx < len(self.wall):
-                    ura_markers.append(_to_mjai_tile(self.wall[ura_idx]))
+                    ura_markers.append(self.wall[ura_idx])
             except ValueError:
-                # Dora not in wall? Should not happen unless bug.
                 pass
-
         return ura_markers
+
+    def _get_ura_markers(self) -> list[str]:
+        """
+        Return ura dora markers from the wall as MJAI strings.
+        """
+        return [_to_mjai_tile(t) for t in self._get_ura_markers_tid()]

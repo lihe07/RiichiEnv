@@ -177,6 +177,8 @@ class TestRiichiScoring:
         # Draw pair match
         env.drawn_tile = 13  # 4m
         env.current_player = 0
+        env.turn_count = 1  # Avoid Tenhou (Turn check)
+        env.discards[0].append(0)  # Avoid Tenhou (Discard check)
 
         # Execute Tsumo
         env.step({0: Action(ActionType.TSUMO)})
