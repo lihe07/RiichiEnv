@@ -535,14 +535,10 @@ class MjsoulEnvVerifier:
                 if t_base == base_type:
                     found_tids.append(tid)
 
-            consumed_tids = []
-            if len(found_tids) >= 4:
-                consumed_tids = found_tids[:4]
-            else:
+            if len(found_tids) < 4:
                 if self._verbose:
                     print(f">> WARNING: Missing tiles for ANKAN of {target_mpsz}. Found {len(found_tids)}. Hand: {cvt.tid_to_mpsz_list(self.obs_dict[player_id].hand)}")
                     print(f">> TRUST: Patching hand to include 4x {target_mpsz} for ANKAN.")
-                consumed_tids = list(found_tids)
                 missing_count = 4 - len(found_tids)
                 for _ in range(missing_count):
                     new_tid = cvt.mpsz_to_tid(target_mpsz) # Canonical
@@ -551,7 +547,6 @@ class MjsoulEnvVerifier:
                         removed = self.env.hands[player_id].pop(0)
                         print(f">> REMOVED {cvt.tid_to_mpsz(removed)} from hand.")
                     self.env.hands[player_id].append(new_tid)
-                    consumed_tids.append(new_tid)
                 self.env.hands[player_id].sort()
 
             action = None
