@@ -244,6 +244,17 @@ class RiichiEnv:
     def done(self) -> bool:
         return self.is_done
 
+    def get_scores(self) -> list[int]:
+        return self.scores
+
+    def get_ranks(self) -> list[int]:
+        # スコアの降順、同点の場合は起家に近い（インデックスが小さい）順に順位を決定
+        sorted_indices = sorted(range(4), key=lambda i: (-self.scores[i], i))
+        ranks = [0] * 4
+        for rank, player_idx in enumerate(sorted_indices, 1):
+            ranks[player_idx] = rank
+        return ranks
+
     def step(self, actions: dict[int, Action]) -> dict[int, Observation]:
         """Execute one step."""
         self.agari_results = {}
