@@ -2,7 +2,7 @@ import hashlib
 import random
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Any
+from typing import Any, cast
 
 from . import _riichienv  # type: ignore
 from ._riichienv import Meld, MeldType  # type: ignore
@@ -285,13 +285,13 @@ class RiichiEnv:
             },
         }
 
-        rule = preset_rules.get(preset_rule)
+        rule = cast(dict[str, Any], preset_rules.get(preset_rule))
         if rule is None:
             raise ValueError(f"Unknown preset rule: {preset_rule}")
 
-        soten_weight = rule["soten_weight"]
-        soten_base = rule["soten_base"]
-        jun_weight = rule["jun_weight"]
+        soten_weight = cast(int, rule["soten_weight"])
+        soten_base = cast(int, rule["soten_base"])
+        jun_weight = cast(list[int], rule["jun_weight"])
         ranks = self.ranks()
         return [
             int((self._scores[i] - soten_base) / 1000.0 * soten_weight + jun_weight[ranks[i] - 1]) for i in range(4)
