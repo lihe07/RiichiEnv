@@ -32,11 +32,11 @@ class TestPaishan:
         assert env.dora_indicators[0] == 131
 
         # Check Ura
-        uras = env._get_ura_markers()
-        assert len(uras) == 1
+        ura_markers = env._get_ura_markers()
+        assert len(ura_markers) == 1
         # Ura is wall[5] = 130.
         # _get_ura_markers returns MJAI strings.
-        assert uras[0] == cvt.tid_to_mjai(130)
+        assert ura_markers[0] == cvt.tid_to_mjai(130)
 
     def test_real_dora_reveal(self):
         paishan_wall_str = (
@@ -80,7 +80,7 @@ class TestPaishan:
 
         # Check Ura
         # Ura should be wall[5] (130) and wall[7] (128).
-        uras = env._get_ura_markers()
-        assert len(uras) == 2
-        assert uras[0] == cvt.tid_to_mjai(130)
-        assert uras[1] == cvt.tid_to_mjai(128)
+        ura_markers = env._get_ura_markers()
+        assert len(ura_markers) == 2
+        assert ura_markers[0] == cvt.tid_to_mjai(130)
+        assert ura_markers[1] == cvt.tid_to_mjai(128)
