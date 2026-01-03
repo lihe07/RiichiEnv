@@ -303,12 +303,11 @@ class RiichiEnv:
         self._rng = random.Random(self._seed)
 
         self.is_done = False
-        self.mjai_log = []
-        self._player_event_counts = [0, 0, 0, 0]
         self.hands = {0: [], 1: [], 2: [], 3: []}
         self.discards = {0: [], 1: [], 2: [], 3: []}
         self.melds = {0: [], 1: [], 2: [], 3: []}
-        self.mjai_log.append({"type": "start_game", "names": ["Player0", "Player1", "Player2", "Player3"], "id": 0})
+        if not self.mjai_log:
+            self.mjai_log.append({"type": "start_game", "names": ["Player0", "Player1", "Player2", "Player3"], "id": 0})
         self._initialize_round(
             oya=oya if oya is not None else 0,
             bakaze=bakaze if bakaze is not None else self._custom_round_wind,
@@ -426,25 +425,29 @@ class RiichiEnv:
         ronners = self._get_ron_potential(discard_tile_id, is_chankan=False)
         for pid in ronners:
             self.current_claims.setdefault(pid, []).append(Action(ActionType.RON, tile=discard_tile_id))
-        for pid in range(4):
-            if pid == self.current_player:
-                continue
-            if self.riichi_declared[pid]:
-                continue
-            for opt in self._can_pon(self.hands[pid], discard_tile_id):
-                self.current_claims.setdefault(pid, []).append(
-                    Action(ActionType.PON, tile=discard_tile_id, consume_tiles=opt)
-                )
-            for opt in self._can_kan(self.hands[pid], discard_tile_id):
-                self.current_claims.setdefault(pid, []).append(
-                    Action(ActionType.DAIMINKAN, tile=discard_tile_id, consume_tiles=opt)
-                )
-        next_p = (self.current_player + 1) % 4
-        if not self.riichi_declared[next_p]:
-            for opt in self._can_chi(self.hands[next_p], discard_tile_id):
-                self.current_claims.setdefault(next_p, []).append(
-                    Action(ActionType.CHI, tile=discard_tile_id, consume_tiles=opt)
-                )
+
+        # Claims (Pon/Chi/Kan/Daiminkan) are NOT allowed on Houtei (last tile).
+        # Houtei occurs when wall length is 14 (dead wall only).
+        if len(self.wall) > 14:
+            for pid in range(4):
+                if pid == self.current_player:
+                    continue
+                if self.riichi_declared[pid]:
+                    continue
+                for opt in self._can_pon(self.hands[pid], discard_tile_id):
+                    self.current_claims.setdefault(pid, []).append(
+                        Action(ActionType.PON, tile=discard_tile_id, consume_tiles=opt)
+                    )
+                for opt in self._can_kan(self.hands[pid], discard_tile_id):
+                    self.current_claims.setdefault(pid, []).append(
+                        Action(ActionType.DAIMINKAN, tile=discard_tile_id, consume_tiles=opt)
+                    )
+            next_p = (self.current_player + 1) % 4
+            if not self.riichi_declared[next_p]:
+                for opt in self._can_chi(self.hands[next_p], discard_tile_id):
+                    self.current_claims.setdefault(next_p, []).append(
+                        Action(ActionType.CHI, tile=discard_tile_id, consume_tiles=opt)
+                    )
 
         if not self.current_claims:
             # Transition to next player's WAIT_ACT and set needs_tsumo flag.
@@ -461,7 +464,9 @@ class RiichiEnv:
             return self.step({})
 
         self.phase = Phase.WAIT_RESPONSE
-        self.active_players = list(self.current_claims.keys())
+        self.active_players = [
+            pid for pid, actions in self.current_claims.items() if any(a.type != ActionType.PASS for a in actions)
+        ]
         return self.get_observations(self.active_players)
 
     def step(self, actions: dict[int, Action]) -> dict[int, Observation]:
