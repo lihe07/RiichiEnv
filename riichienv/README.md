@@ -16,6 +16,9 @@
 
 This package requires **Rust** to build the core extension.
 
+* TODO: Upload the binary wheel packages to PyPI.
+* TODO: Upload the binary packages to crates.io.
+
 ```bash
 # Using uv (Recommended)
 uv sync
@@ -93,11 +96,13 @@ scores, points = env.scores(), env.points()
 
 ### Compatibility with Mortal
 
-Mortal の mjai Bot とイベント処理フローの互換性を持ちます。
+Mortal の mjai Bot とイベント処理フローの互換性を持ちます。`obs.new_events()` により、行動可能になるまでの未読の mjai イベントを文字列形式で取得できます。
+`Agent` クラスの `act()` メソッドは `riichienv.action.Action` を返す必要があります。`obs.select_action_from_mjai()` メソッドを使うことで、mjai 形式のイベント文字列から選択可能な `Action` オブジェクトを選択することができます。
 
 ```python
 from riichienv import RiichiEnv
 from riichienv.game_mode import GameType
+from riichienv.action import Action
 
 from model import load_model
 
@@ -126,6 +131,18 @@ while not env.done():
 scores, points, ranks = env.scores(), env.points(), env.ranks()
 print("FINISHED:", scores, points, ranks)
 ```
+
+### Agari Calculation
+
+TBD
+
+### Tile Conversion
+
+TBD
+
+## Rust API
+
+TBD
 
 ## 🛠 Development
 
