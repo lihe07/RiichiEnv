@@ -1535,7 +1535,7 @@ impl RiichiEnv {
                     let action = valid_actions[&claimer].clone();
                     let tile = self.last_discard.unwrap().1;
 
-                    self._execute_claim(claimer, action.clone(), Some(self.current_player));
+                    self._execute_claim(claimer, action.clone(), Some(self.current_player))?;
 
                     if let Some((_, pk)) = self.pending_kan.clone() {
                         if pk.action_type == ActionType::Kakan
@@ -1634,7 +1634,7 @@ impl RiichiEnv {
                         claimer,
                         valid_actions[&claimer].clone(),
                         Some(self.current_player),
-                    );
+                    )?;
                     self.current_player = claimer;
                     self.phase = Phase::WaitAct;
                     self.active_players = vec![claimer];
@@ -1968,29 +1968,80 @@ impl RiichiEnv {
 
                 if count >= 2 {
                     // Pon
-                    let consume: Vec<u8> = hand
+                    // We need all distinct combinations of 2 tiles.
+                    // Possible counts of red: 0 or 1 (since total is 4 and only 1 is red).
+                    // Wait, POM can have:
+                    // 1. Two black tiles
+                    // 2. One red and one black
+                    let reds: Vec<u8> = hand
                         .iter()
                         .cloned()
-                        .filter(|&t| t / 4 == tile / 4)
-                        .take(2)
+                        .filter(|&t| (t == 16 || t == 52 || t == 88) && t / 4 == tile / 4)
                         .collect();
-                    self.current_claims
-                        .entry(pid)
-                        .or_default()
-                        .push(Action::new(ActionType::Pon, Some(tile), consume));
+                    let blacks: Vec<u8> = hand
+                        .iter()
+                        .cloned()
+                        .filter(|&t| (t != 16 && t != 52 && t != 88) && t / 4 == tile / 4)
+                        .collect();
+
+                    // Option 1: Two blacks
+                    if blacks.len() >= 2 {
+                        self.current_claims
+                            .entry(pid)
+                            .or_default()
+                            .push(Action::new(
+                                ActionType::Pon,
+                                Some(tile),
+                                vec![blacks[0], blacks[1]],
+                            ));
+                    }
+                    // Option 2: One red, one black
+                    if !reds.is_empty() && !blacks.is_empty() {
+                        self.current_claims
+                            .entry(pid)
+                            .or_default()
+                            .push(Action::new(
+                                ActionType::Pon,
+                                Some(tile),
+                                vec![reds[0], blacks[0]],
+                            ));
+                    }
                 }
                 if count >= 3 {
                     // Daiminkan
-                    let consume: Vec<u8> = hand
+                    // Option 1: Three blacks
+                    // Option 2: One red, two blacks
+                    let reds: Vec<u8> = hand
                         .iter()
                         .cloned()
-                        .filter(|&t| t / 4 == tile / 4)
-                        .take(3)
+                        .filter(|&t| (t == 16 || t == 52 || t == 88) && t / 4 == tile / 4)
                         .collect();
-                    self.current_claims
-                        .entry(pid)
-                        .or_default()
-                        .push(Action::new(ActionType::Daiminkan, Some(tile), consume));
+                    let blacks: Vec<u8> = hand
+                        .iter()
+                        .cloned()
+                        .filter(|&t| (t != 16 && t != 52 && t != 88) && t / 4 == tile / 4)
+                        .collect();
+
+                    if blacks.len() >= 3 {
+                        self.current_claims
+                            .entry(pid)
+                            .or_default()
+                            .push(Action::new(
+                                ActionType::Daiminkan,
+                                Some(tile),
+                                vec![blacks[0], blacks[1], blacks[2]],
+                            ));
+                    }
+                    if !reds.is_empty() && blacks.len() >= 2 {
+                        self.current_claims
+                            .entry(pid)
+                            .or_default()
+                            .push(Action::new(
+                                ActionType::Daiminkan,
+                                Some(tile),
+                                vec![reds[0], blacks[0], blacks[1]],
+                            ));
+                    }
                 }
             }
 
@@ -2010,36 +2061,119 @@ impl RiichiEnv {
                     hand.iter().any(|&t| t / 4 == target)
                 };
 
-                // Helper to find first tile of type
-                let find =
-                    |n: u8| -> u8 { *hand.iter().find(|&&t| t / 4 == suit * 9 + n).unwrap() };
-
                 // Left: T-2, T-1
                 if num >= 2 && has(num - 2) && has(num - 1) {
-                    let t1 = find(num - 2);
-                    let t2 = find(num - 1);
-                    self.current_claims
-                        .entry(next_pid)
-                        .or_default()
-                        .push(Action::new(ActionType::Chi, Some(tile), vec![t1, t2]));
+                    let ts1: Vec<u8> = hand
+                        .iter()
+                        .cloned()
+                        .filter(|&t| t / 4 == suit * 9 + num - 2)
+                        .collect();
+                    let ts2: Vec<u8> = hand
+                        .iter()
+                        .cloned()
+                        .filter(|&t| t / 4 == suit * 9 + num - 1)
+                        .collect();
+                    let mut distinct1 = Vec::new();
+                    let mut seen1 = HashSet::new();
+                    for t in ts1 {
+                        let is_red = t == 16 || t == 52 || t == 88;
+                        if seen1.insert(is_red) {
+                            distinct1.push(t);
+                        }
+                    }
+                    let mut distinct2 = Vec::new();
+                    let mut seen2 = HashSet::new();
+                    for t in ts2 {
+                        let is_red = t == 16 || t == 52 || t == 88;
+                        if seen2.insert(is_red) {
+                            distinct2.push(t);
+                        }
+                    }
+
+                    for &t1 in &distinct1 {
+                        for &t2 in &distinct2 {
+                            self.current_claims
+                                .entry(next_pid)
+                                .or_default()
+                                .push(Action::new(ActionType::Chi, Some(tile), vec![t1, t2]));
+                        }
+                    }
                 }
                 // Middle: T-1, T+1
                 if (1..=7).contains(&num) && has(num - 1) && has(num + 1) {
-                    let t1 = find(num - 1);
-                    let t2 = find(num + 1);
-                    self.current_claims
-                        .entry(next_pid)
-                        .or_default()
-                        .push(Action::new(ActionType::Chi, Some(tile), vec![t1, t2]));
+                    let ts1: Vec<u8> = hand
+                        .iter()
+                        .cloned()
+                        .filter(|&t| t / 4 == suit * 9 + num - 1)
+                        .collect();
+                    let ts2: Vec<u8> = hand
+                        .iter()
+                        .cloned()
+                        .filter(|&t| t / 4 == suit * 9 + num + 1)
+                        .collect();
+                    let mut distinct1 = Vec::new();
+                    let mut seen1 = HashSet::new();
+                    for t in ts1 {
+                        let is_red = t == 16 || t == 52 || t == 88;
+                        if seen1.insert(is_red) {
+                            distinct1.push(t);
+                        }
+                    }
+                    let mut distinct2 = Vec::new();
+                    let mut seen2 = HashSet::new();
+                    for t in ts2 {
+                        let is_red = t == 16 || t == 52 || t == 88;
+                        if seen2.insert(is_red) {
+                            distinct2.push(t);
+                        }
+                    }
+
+                    for &t1 in &distinct1 {
+                        for &t2 in &distinct2 {
+                            self.current_claims
+                                .entry(next_pid)
+                                .or_default()
+                                .push(Action::new(ActionType::Chi, Some(tile), vec![t1, t2]));
+                        }
+                    }
                 }
                 // Right: T+1, T+2
                 if num <= 6 && has(num + 1) && has(num + 2) {
-                    let t1 = find(num + 1);
-                    let t2 = find(num + 2);
-                    self.current_claims
-                        .entry(next_pid)
-                        .or_default()
-                        .push(Action::new(ActionType::Chi, Some(tile), vec![t1, t2]));
+                    let ts1: Vec<u8> = hand
+                        .iter()
+                        .cloned()
+                        .filter(|&t| t / 4 == suit * 9 + num + 1)
+                        .collect();
+                    let ts2: Vec<u8> = hand
+                        .iter()
+                        .cloned()
+                        .filter(|&t| t / 4 == suit * 9 + num + 2)
+                        .collect();
+                    let mut distinct1 = Vec::new();
+                    let mut seen1 = HashSet::new();
+                    for t in ts1 {
+                        let is_red = t == 16 || t == 52 || t == 88;
+                        if seen1.insert(is_red) {
+                            distinct1.push(t);
+                        }
+                    }
+                    let mut distinct2 = Vec::new();
+                    let mut seen2 = HashSet::new();
+                    for t in ts2 {
+                        let is_red = t == 16 || t == 52 || t == 88;
+                        if seen2.insert(is_red) {
+                            distinct2.push(t);
+                        }
+                    }
+
+                    for &t1 in &distinct1 {
+                        for &t2 in &distinct2 {
+                            self.current_claims
+                                .entry(next_pid)
+                                .or_default()
+                                .push(Action::new(ActionType::Chi, Some(tile), vec![t1, t2]));
+                        }
+                    }
                 }
             }
         }
@@ -2053,9 +2187,9 @@ impl RiichiEnv {
             tsumo: false,
             riichi: self.riichi_declared[pid as usize],
             double_riichi: self.double_riichi_declared[pid as usize],
-            ippatsu: false, // TODO
+            ippatsu: self.ippatsu_cycle[pid as usize],
             player_wind: Wind::from((pid + 4 - self.oya) % 4),
-            round_wind: Wind::East,
+            round_wind: Wind::from(self.round_wind),
             chankan: false,
             haitei: false,
             houtei: self.wall.len() <= 14,
@@ -2537,7 +2671,7 @@ impl RiichiEnv {
         actions
     }
 
-    fn _execute_claim(&mut self, pid: u8, action: Action, from_pid: Option<u8>) {
+    fn _execute_claim(&mut self, pid: u8, action: Action, from_pid: Option<u8>) -> PyResult<()> {
         if self.mjai_mode {
             println!(
                 "DEBUG RUST: _execute_claim START pid={} action={:?} current_melds_len={}",
@@ -2618,20 +2752,93 @@ impl RiichiEnv {
                     self.mjai_log.push(Value::Object(ev).to_string());
 
                     self.pending_kan_dora_count += 1;
-                    return;
+                    return Ok(());
                 }
                 // Fallback (Ankan logic if kakan fails?) - Python logic handles this.
                 // Assuming valid Kakan implies existing Pon.
-                return;
+                return Ok(());
             }
             _ => {}
         }
 
         // Remove consume tiles from hand
         if action.action_type != ActionType::Kakan {
+            // Validation: Structural check
+            let mut all_tiles = consumed.clone();
+            if let Some(t) = action.tile {
+                all_tiles.push(t);
+            }
+            all_tiles.sort();
+
+            match action.action_type {
+                ActionType::Chi => {
+                    // 3 tiles, same suit, sequence
+                    if all_tiles.len() != 3 {
+                        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                            "CHI must have 3 tiles",
+                        ));
+                    }
+                    let t1 = all_tiles[0] / 4;
+                    let t2 = all_tiles[1] / 4;
+                    let t3 = all_tiles[2] / 4;
+                    if t1 >= 27 || t2 >= 27 || t3 >= 27 {
+                        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                            "CHI cannot include honor tiles",
+                        ));
+                    }
+                    if (t1 / 9 != t2 / 9) || (t2 / 9 != t3 / 9) {
+                        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                            "CHI tiles must be in the same suit",
+                        ));
+                    }
+                    if t1 + 1 != t2 || t2 + 1 != t3 {
+                        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                            "CHI tiles must be a sequence",
+                        ));
+                    }
+                }
+                ActionType::Pon => {
+                    if all_tiles.len() != 3 {
+                        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                            "PON must have 3 tiles",
+                        ));
+                    }
+                    let t1 = all_tiles[0] / 4;
+                    let t2 = all_tiles[1] / 4;
+                    let t3 = all_tiles[2] / 4;
+                    if t1 != t2 || t2 != t3 {
+                        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                            "PON tiles must be of the same type",
+                        ));
+                    }
+                }
+                ActionType::Daiminkan | ActionType::Ankan => {
+                    if all_tiles.len() != 4 {
+                        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                            "KAN must have 4 tiles",
+                        ));
+                    }
+                    let t1 = all_tiles[0] / 4;
+                    let t2 = all_tiles[1] / 4;
+                    let t3 = all_tiles[2] / 4;
+                    let t4 = all_tiles[3] / 4;
+                    if t1 != t2 || t2 != t3 || t3 != t4 {
+                        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                            "KAN tiles must be of the same type",
+                        ));
+                    }
+                }
+                _ => {}
+            }
+
             for &c in &consumed {
                 if let Some(pos) = hand.iter().position(|&x| x == c) {
                     hand.remove(pos);
+                } else {
+                    return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                        "Tile {} not in hand",
+                        c
+                    )));
                 }
             }
             // Add tile to meld
@@ -2680,6 +2887,7 @@ impl RiichiEnv {
             // Hand sorting? Usually done.
             self.hands[pid as usize].sort();
         }
+        Ok(())
     }
 
     fn _check_tsumo(&self, pid: u8, tile: u8) -> bool {
@@ -2693,7 +2901,7 @@ impl RiichiEnv {
             tsumo: true,
             riichi: self.riichi_declared[pid as usize],
             double_riichi: self.double_riichi_declared[pid as usize],
-            ippatsu: false, // TODO: track ippatsu
+            ippatsu: self.ippatsu_cycle[pid as usize],
             player_wind: Wind::from((pid + 4 - self.oya) % 4),
             round_wind: Wind::from(self.round_wind),
             chankan: false,

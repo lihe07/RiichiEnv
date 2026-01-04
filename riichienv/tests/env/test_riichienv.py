@@ -1,3 +1,7 @@
+import json
+
+import pytest
+
 from riichienv import Action, ActionType, Observation, Phase, RiichiEnv
 
 
@@ -119,3 +123,414 @@ class TestRiichiEnv:
         assert env.mjai_log[3]["pai"] != "?"
         assert env.mjai_log[4]["actor"] == 1
         assert env.mjai_log[4]["pai"] != "?"
+
+    def test_new_events(self) -> None:
+        env = RiichiEnv(seed=9)
+        obs_dict = env.reset()
+
+        assert env.phase == Phase.WaitAct
+        p0_obs = obs_dict[0]
+        initial_events = p0_obs.new_events()
+        assert len(initial_events) == 3
+        assert json.loads(initial_events[2])["pai"] != "?"
+
+        p0_tile = p0_obs.hand[0]
+        obs_dict = env.step({0: Action(ActionType.Discard, tile=p0_tile)})
+
+        assert env.phase == Phase.WaitAct
+        assert 1 in obs_dict
+        assert 0 not in obs_dict
+
+        p1_obs = obs_dict[1]
+        p1_new = [json.loads(ev) for ev in p1_obs.new_events()]
+
+        # Let's count:
+        # 1. start_game
+        # 2. start_kyoku
+        # 3. tsumo(0)
+        # 4. dahai(0)
+        # 5. tsumo(1)
+
+        assert len(p1_new) == 5
+        assert p1_new[4]["type"] == "tsumo"
+        assert p1_new[4]["actor"] == 1
+
+        p1_tile = p1_obs.hand[0]
+        obs_dict = env.step({1: Action(ActionType.Discard, tile=p1_tile)})
+
+        assert 2 in obs_dict
+        assert 1 not in obs_dict
+
+        p2_obs = obs_dict[2]
+        p2_new = [json.loads(ev) for ev in p2_obs.new_events()]
+
+        assert len(p2_new) == 7
+        assert p2_new[6]["type"] == "tsumo"
+        assert p2_new[6]["actor"] == 2
+
+        p2_tile = p2_obs.hand[0]
+        obs_dict = env.step({2: Action(ActionType.Discard, tile=p2_tile)})
+
+        assert env.phase == Phase.WaitAct
+        assert 3 in obs_dict
+        assert 2 not in obs_dict
+
+        p3_obs = obs_dict[3]
+        p3_new = [json.loads(ev) for ev in p3_obs.new_events()]
+
+        assert len(p3_new) == 9
+        assert p3_new[8]["type"] == "tsumo"
+        assert p3_new[8]["actor"] == 3
+
+        p3_tile = p3_obs.hand[0]
+        obs_dict = env.step({3: Action(ActionType.Discard, tile=p3_tile)})
+
+        assert env.phase == Phase.WaitAct
+        assert 0 in obs_dict
+        assert 3 not in obs_dict
+
+        p0_obs = obs_dict[0]
+        p0_new = [json.loads(ev) for ev in p0_obs.new_events()]
+
+        # Check new events from p0_obs
+        # 1. start_game (not included)
+        # 2. start_kyoku (not included)
+        # 3. tsumo(0)(not included)
+        # 4. dahai(0)
+        # 5. tsumo(1)
+        # 6. dahai(1)
+        # 7. tsumo(2)
+        # 8. dahai(2)
+        # 9. tsumo(3)
+        # 10. dahai(3)
+        # 11. tsumo(0)
+        assert len(p0_new) == 8
+        assert p0_new[0]["type"] == "dahai"
+        assert p0_new[0]["actor"] == 0
+
+    def test_pon_claim(self) -> None:
+        env = RiichiEnv(seed=42)
+        env.reset()
+
+        h = env.hands
+        h[0] = [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48]
+        # P2 hand: has 1m pair (1, 2)
+        h[2] = [1, 2, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45]
+        h[2].sort()
+        env.hands = h
+        env.active_players = [0]
+        env.current_player = 0
+        env.drawn_tile = 52  # 5p
+
+        obs_dict = env.step({0: Action(ActionType.Discard, tile=0)})
+        assert env.phase == Phase.WaitResponse
+        assert env.active_players == [2]
+        assert list(obs_dict.keys()) == [2]
+
+        # P2 legal actions check
+        obs = obs_dict[2]
+        legals = obs.legal_actions()
+        pon_actions = [a for a in legals if a.type == ActionType.PON]
+        assert len(pon_actions) > 0
+
+        # P2 performs PON
+        action = Action(ActionType.PON, tile=0, consume_tiles=[1, 2])
+        env.step({2: action})
+
+        # P2 should now be current player (WaitAct)
+        assert env.current_player == 2
+        assert env.phase == Phase.WaitAct
+
+        # Check MJAI log
+        last_ev = env.mjai_log[-1]
+        assert last_ev["type"] == "pon"
+        assert last_ev["actor"] == 2
+        assert last_ev["target"] == 0  # From P0
+        assert last_ev["pai"] == "1m"
+
+    def test_pon_red_dora_claim(self) -> None:
+        env = RiichiEnv(seed=42)
+        env.reset()
+
+        h = env.hands
+        h[0] = [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48]
+        # P2 hand: has 5m pair (17, 18)
+        h[2] = [17, 18, 21, 25, 29, 33, 37, 41, 45, 49, 53, 57, 61]
+        h[2].sort()
+        env.hands = h
+        env.active_players = [0]
+        env.current_player = 0
+        env.drawn_tile = 16  # 5mr
+
+        obs_dict = env.step({0: Action(ActionType.Discard, tile=16)})
+        assert env.phase == Phase.WaitResponse
+        assert env.active_players == [2]
+        assert list(obs_dict.keys()) == [2]
+
+        # P2 legal actions check
+        obs = obs_dict[2]
+        pon_actions = [a for a in obs.legal_actions() if a.type == ActionType.PON]
+        assert len(pon_actions) > 0
+
+        # P2 performs PON
+        action = pon_actions[0]
+        env.step({2: action})
+
+        # P2 should now be current player (WaitAct)
+        assert env.current_player == 2
+        assert env.phase == Phase.WaitAct
+
+        # Check MJAI log
+        last_ev = env.mjai_log[-1]
+        assert last_ev["type"] == "pon"
+        assert last_ev["actor"] == 2
+        assert last_ev["target"] == 0  # From P0
+        assert last_ev["pai"] == "5mr"
+
+    def test_chi_claim(self) -> None:
+        env = RiichiEnv(seed=42)
+        env.reset()
+
+        # Setup: P0 discards 3m (ID 8,9,10,11).
+        # P1 (Right/Next) has 4m, 5m.
+        # 3m, 4m, 5m sequence.
+
+        tile_3m = 8
+        tile_4m = 12
+        tile_5m = 16
+
+        h = env.hands
+        h[0] = [tile_3m] + list(range(40, 40 + 12))
+        h[1] = [tile_4m, tile_5m] + list(range(60, 60 + 11))
+        h[1].sort()
+        env.hands = h
+
+        env.active_players = [0]
+        env.current_player = 0
+
+        env.drawn_tile = 100  # irrelevant
+
+        # P0 Discards 3m
+        env.step({0: Action(ActionType.DISCARD, tile=tile_3m)})
+
+        # Should be in WaitResponse
+        # P1 is next player (0->1 is Chi valid)
+        assert env.phase == 1
+        assert 1 in env.active_players
+
+        # P1 Checks Legal
+        obs = env.get_observations([1])[1]
+        legals = obs.legal_actions()
+        chi_actions = [a for a in legals if a.type == ActionType.CHI]
+        assert len(chi_actions) > 0
+
+        # P1 performs CHI
+        action = Action(ActionType.CHI, tile=tile_3m, consume_tiles=[tile_4m, tile_5m])
+        env.step({1: action})
+
+        # P1 current player
+        assert env.current_player == 1
+        assert env.phase == 0
+
+        last_ev = env.mjai_log[-1]
+        assert last_ev["type"] == "chi"
+
+    def test_chi_claim_with_red_dora(self) -> None:
+        # P1 に 5m, 5mr が手にある状態でチーをするとき、どちらの牌を使ってチーするか選択できることを確認する
+        env = RiichiEnv(seed=42)
+        env.reset()
+
+        # Setup: P0 discards 3m (ID 8,9,10,11).
+        # P1 (Right/Next/Shimocha) has 4m, 5m, 5mr.
+        # (3m, 4m, 5m) and (3m, 4m, 5mr) sequence.
+
+        tile_3m = 8
+        tile_4m = 12
+        tile_5mr = 16
+        tile_5m = 17
+
+        h = env.hands
+        h[0] = [tile_3m] + list(range(40, 40 + 12))
+        h[1] = [tile_4m, tile_5mr, tile_5m] + list(range(60, 60 + 11))
+        h[1].sort()
+        env.hands = h
+
+        env.active_players = [0]
+        env.current_player = 0
+
+        env.drawn_tile = 100  # irrelevant
+
+        # P0 Discards 3m
+        obs_dict = env.step({0: Action(ActionType.DISCARD, tile=tile_3m)})
+
+        # Should be in WaitResponse
+        # P1 is next player (0->1 is Chi valid)
+        assert env.phase == Phase.WaitResponse
+        assert 1 in env.active_players
+
+        # P1 Checks Legal
+        obs = obs_dict[1]
+        legals = obs.legal_actions()
+        chi_actions = [a for a in legals if a.type == ActionType.CHI]
+        assert len(chi_actions) == 2
+
+        # P1 performs CHI
+        action = Action(ActionType.CHI, tile=tile_3m, consume_tiles=[tile_4m, tile_5m])
+        env.step({1: action})
+
+        # P1 current player
+        assert env.current_player == 1
+        assert env.phase == Phase.WaitAct
+
+        last_ev = env.mjai_log[-1]
+        assert last_ev["type"] == "chi"
+        assert last_ev["pai"] == "3m"
+        assert last_ev["consumed"] == ["4m", "5m"]
+
+        # もう一つのパターンでもチーできることを確認する
+        env = RiichiEnv(seed=42)
+        env.reset()
+
+        # Setup: P0 discards 3m (ID 8,9,10,11).
+        # P1 (Right/Next/Shimocha) has 4m, 5m, 5mr.
+        # (3m, 4m, 5m) and (3m, 4m, 5mr) sequence.
+
+        tile_3m = 8
+        tile_4m = 12
+        tile_5mr = 16
+        tile_5m = 17
+
+        h = env.hands
+        h[0] = [tile_3m] + list(range(40, 40 + 12))
+        h[1] = [tile_4m, tile_5mr, tile_5m] + list(range(60, 60 + 11))
+        h[1].sort()
+        env.hands = h
+
+        env.active_players = [0]
+        env.current_player = 0
+
+        env.drawn_tile = 100  # irrelevant
+
+        # P0 Discards 3m
+        obs_dict = env.step({0: Action(ActionType.DISCARD, tile=tile_3m)})
+
+        # Should be in WaitResponse
+        # P1 is next player (0->1 is Chi valid)
+        assert env.phase == Phase.WaitResponse
+        assert 1 in env.active_players
+
+        # P1 Checks Legal
+        obs = obs_dict[1]
+        legals = obs.legal_actions()
+        chi_actions = [a for a in legals if a.type == ActionType.CHI]
+        assert len(chi_actions) == 2
+
+        # P1 performs CHI
+        action = Action(ActionType.CHI, tile=tile_3m, consume_tiles=[tile_4m, tile_5mr])
+        env.step({1: action})
+
+        # P1 current player
+        assert env.current_player == 1
+        assert env.phase == Phase.WaitAct
+
+        last_ev = env.mjai_log[-1]
+        assert last_ev["type"] == "chi"
+        assert last_ev["pai"] == "3m"
+        assert last_ev["consumed"] == ["4m", "5mr"]
+
+    def test_chi_claim_with_invalid_tile(self) -> None:
+        # もう一つのパターンでもチーできることを確認する
+        env = RiichiEnv(seed=42)
+        env.reset()
+
+        # Setup: P0 discards 3m (ID 8,9,10,11).
+        # P1 (Right/Next/Shimocha) has 4m, 5m, 5mr.
+        # (3m, 4m, 5m) and (3m, 4m, 5mr) sequence.
+
+        tile_3m = 8
+        tile_4m = 12
+        tile_5mr = 16
+        tile_5m = 17
+        invalid_tile = 60
+
+        h = env.hands
+        h[0] = [tile_3m] + list(range(40, 40 + 12))
+        h[1] = [tile_4m, tile_5mr, tile_5m] + list(range(60, 60 + 11))
+        h[1].sort()
+        env.hands = h
+
+        env.active_players = [0]
+        env.current_player = 0
+
+        env.drawn_tile = 100  # irrelevant
+
+        # P0 Discards 3m
+        obs_dict = env.step({0: Action(ActionType.DISCARD, tile=tile_3m)})
+
+        # Should be in WaitResponse
+        # P1 is next player (0->1 is Chi valid)
+        assert env.phase == Phase.WaitResponse
+        assert 1 in env.active_players
+
+        # P1 Checks Legal
+        obs = obs_dict[1]
+        legals = obs.legal_actions()
+        chi_actions = [a for a in legals if a.type == ActionType.CHI]
+        assert len(chi_actions) == 2
+
+        # P1 performs CHI with a tile NOT in hand
+        with pytest.raises(ValueError):
+            # 10 is 3m, but P1 doesn't have 3m (IDs 8-11).
+            action = Action(ActionType.CHI, tile=tile_3m, consume_tiles=[tile_4m, 10])
+            env.step({1: action})
+
+        # P1 performs CHI with tiles IN HAND but NOT a sequence
+        with pytest.raises(ValueError):
+            # hand has 12 (4m), 60 (1p)
+            # tile_3m is 8 (3m)
+            # [12, 60] + [8] -> 4m, 1p, 3m (NOT a sequence)
+            action = Action(ActionType.CHI, tile=tile_3m, consume_tiles=[tile_4m, invalid_tile])
+            env.step({1: action})
+
+    def test_chi_multiple_patterns(self) -> None:
+        # 123456789m5mr が手にあるとき、4m 打牌に対して 5 通りの CHI が発生することを確認する
+        env = RiichiEnv(seed=42)
+        env.reset()
+
+        # Tiles: 1m..9m + 5mr
+        # 1m: 0, 2m: 4, 3m: 8, 4m: 12, 5mr: 16, 5m: 17, 6m: 20, 7m: 24, 8m: 28, 9m: 32
+        hand_tiles = [0, 4, 8, 12, 16, 17, 20, 24, 28, 32] + [100, 104, 108]
+
+        h = env.hands
+        h[0] = [13] + list(range(40, 40 + 12))  # P0 discards 4m (ID 13)
+        h[1] = hand_tiles
+        h[1].sort()
+        env.hands = h
+
+        env.active_players = [0]
+        env.current_player = 0
+        env.drawn_tile = 100
+
+        # P0 Discards 4m
+        obs_dict = env.step({0: Action(ActionType.DISCARD, tile=13)})
+
+        # P1 Checks Legal
+        obs = obs_dict[1]
+        legals = obs.legal_actions()
+        chi_actions = [a for a in legals if a.type == ActionType.CHI]
+
+        # Expect 5 CHI patterns:
+        # [4, 8] (23m)
+        # [8, 17] (35m)
+        # [8, 16] (35mr)
+        # [17, 20] (56m)
+        # [16, 20] (5mr6m)
+
+        assert len(chi_actions) == 5
+
+        consumed_sets = [set(a.consume_tiles) for a in chi_actions]
+        assert {4, 8} in consumed_sets
+        assert {8, 17} in consumed_sets
+        assert {8, 16} in consumed_sets
+        assert {17, 20} in consumed_sets
+        assert {16, 20} in consumed_sets
