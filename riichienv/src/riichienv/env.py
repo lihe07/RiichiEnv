@@ -2,7 +2,6 @@ import hashlib
 import json
 import random
 from dataclasses import dataclass, field
-from enum import IntEnum
 from typing import Any
 
 from . import _riichienv  # type: ignore
@@ -100,7 +99,7 @@ def _to_mjai_tile(tile_136: int) -> str:
         return f"{num}z"
 
 
-from ._riichienv import Phase  # type: ignore
+from ._riichienv import Phase  # type: ignore  # noqa: E402
 
 Phase.WaitAct = Phase.WaitAct
 Phase.WaitResponse = Phase.WaitResponse

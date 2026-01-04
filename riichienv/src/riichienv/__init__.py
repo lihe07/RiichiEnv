@@ -1,6 +1,5 @@
 from . import convert
 from ._riichienv import (  # type: ignore
-    RiichiEnv,
     AgariContext,
     Kyoku,
     Meld,
@@ -8,6 +7,7 @@ from ._riichienv import (  # type: ignore
     Observation,
     Phase,
     ReplayGame,
+    RiichiEnv,
     Score,
     Wind,
     calculate_score,

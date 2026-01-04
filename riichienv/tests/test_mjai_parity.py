@@ -1,5 +1,4 @@
-import pytest
-from riichienv import RiichiEnv, Action, ActionType
+from riichienv import Action, ActionType, RiichiEnv
 
 
 def test_action_to_mjai_red_fives():

@@ -1,4 +1,4 @@
-from riichienv import RiichiEnv, Action, ActionType, GameType
+from riichienv import Action, ActionType, RiichiEnv
 
 
 def test_kyushu_kyuhai():

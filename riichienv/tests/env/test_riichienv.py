@@ -1,4 +1,4 @@
-from riichienv import RiichiEnv, Observation, Action, ActionType, Phase
+from riichienv import Action, ActionType, Observation, Phase, RiichiEnv
 
 
 class TestRiichiEnv:

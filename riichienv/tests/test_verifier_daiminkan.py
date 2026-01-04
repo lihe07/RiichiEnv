@@ -9,10 +9,10 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 scripts_dir = os.path.join(current_dir, "..", "scripts")
 sys.path.append(scripts_dir)
 
-from verify_gym_api_with_mjsoul import MjsoulEnvVerifier
+from verify_gym_api_with_mjsoul import MjsoulEnvVerifier  # noqa: E402
 
-import riichienv.convert as cvt
-from riichienv import RiichiEnv, Action, ActionType
+import riichienv.convert as cvt  # noqa: E402
+from riichienv import Action, ActionType  # noqa: E402
 
 
 class TestVerifierSmartScan:

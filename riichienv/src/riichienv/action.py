@@ -1,5 +1,7 @@
 from ._riichienv import Action, ActionType  # type: ignore
 
+__all__ = ["Action", "ActionType"]
+
 # Uppercase aliases for backward compatibility
 ActionType.DISCARD = ActionType.Discard
 ActionType.CHI = ActionType.Chi
