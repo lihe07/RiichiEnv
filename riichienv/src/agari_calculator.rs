@@ -106,7 +106,7 @@ impl AgariCalculator {
                 win_tile_136, conditions.houtei, conditions.haitei, conditions.tsumo
             );
         }
-        let is_agari = agari::is_agari(&hand_14);
+        let is_agari = agari::is_agari(&mut hand_14);
 
         if !is_agari {
             return Agari::new(false, false, 0, 0, 0, vec![], 0, 0);
@@ -178,13 +178,14 @@ impl AgariCalculator {
         if current_total != 13 {
             return false;
         }
+        let mut hand_14 = self.hand.clone();
         for i in 0..crate::types::TILE_MAX {
-            let mut hand_14 = self.hand.clone();
             if hand_14.counts[i] < 4 {
                 hand_14.add(i as u8);
-                if agari::is_agari(&hand_14) {
+                if agari::is_agari(&mut hand_14) {
                     return true;
                 }
+                hand_14.remove(i as u8);
             }
         }
         false
@@ -196,13 +197,14 @@ impl AgariCalculator {
         if current_total != 13 {
             return waits;
         }
+        let mut hand_14 = self.hand.clone();
         for i in 0..crate::types::TILE_MAX {
-            let mut hand_14 = self.hand.clone();
             if hand_14.counts[i] < 4 {
                 hand_14.add(i as u8);
-                if agari::is_agari(&hand_14) {
+                if agari::is_agari(&mut hand_14) {
                     waits.push(i as u8);
                 }
+                hand_14.remove(i as u8);
             }
         }
         waits

@@ -1,5 +1,10 @@
 use pyo3::prelude::*;
 
+use mimalloc::MiMalloc;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
+
 mod agari;
 mod agari_calculator;
 mod score;
@@ -40,7 +45,7 @@ fn check_riichi_candidates(tiles_136: Vec<u8>) -> Vec<u8> {
             }
         }
 
-        if agari::is_tenpai(&hand) {
+        if agari::is_tenpai(&mut hand) {
             candidates.push(t_discard);
         }
     }
