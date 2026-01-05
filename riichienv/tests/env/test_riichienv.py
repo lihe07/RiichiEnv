@@ -576,3 +576,74 @@ class TestRiichiEnv:
         # Should log Hora (A single Ron doesn't necessarily end the game)
         ev_types = [ev["type"] for ev in env.mjai_log[-3:]]
         assert "hora" in ev_types
+
+    def test_ankan_riichi_legality(self) -> None:
+        env = RiichiEnv(seed=42)
+        env.reset()
+
+        # P3 Hand: 2m x 2, 7p, 8p, 9p, 1s x 4, 2s, 3s, 5s, 6s, 1p
+        # 2m: 4, 5
+        # 7p: 60, 8p: 64, 9p: 68
+        # 1s: 72, 73, 74, 75
+        # 2s: 76, 3s: 80
+        # 5s: 88, 6s: 92
+        # 1p: 36
+        # Total 14 tiles
+        p3_hand = [4, 5, 36, 60, 64, 68, 72, 73, 74, 75, 76, 80, 88, 92]
+        p3_hand.sort()
+
+        h = env.hands
+        h[3] = p3_hand
+        env.hands = h
+
+        # Phase: P3 Turn (Drawn tile 72)
+        env.current_player = 3
+        env.phase = Phase.WaitAct
+        env.drawn_tile = 72  # Assume it drew 1s
+        rd = list(env.riichi_declared)
+        rd[3] = True
+        env.riichi_declared = rd
+
+        # Check legal actions
+        obs = env.get_observations()
+        obs3 = obs[3]
+        legals = obs3.legal_actions()
+
+        # In this scenario, 1s,1s,1s,1s were part of a 1s,2s,3s sequence wait.
+        # Ankan would change the waits, so it should be ILLEGAL.
+        ankan = [a for a in legals if a.type == ActionType.Ankan]
+        assert len(ankan) == 0, f"Ankan should be illegal as it changes waits. Legals: {legals}"
+
+    def test_riichi_declared_on_claim(self) -> None:
+        """Verify that riichi_declared is updated when the reach tile is claimed."""
+        env = RiichiEnv(seed=42)
+        env.reset()
+
+        # Prepare P0 hand to Pon East (109, 110)
+        h = env.hands
+        h[0] = [109, 110] + list(env.hands[0][2:])
+        env.hands = h
+
+        # P3 Turn, declares Riichi
+        env.current_player = 3
+        env.phase = Phase.WaitAct
+        env.drawn_tile = 108
+        env.step({3: Action(ActionType.Riichi)})
+
+        # P3 Discards reach tile
+        env.step({3: Action(ActionType.Discard, tile=108)})
+
+        # P0 PONS the reach tile
+        assert env.phase == Phase.WaitResponse
+        assert 108 in [a.tile for a in env.get_observations(players=[0])[0].legal_actions() if a.type == ActionType.Pon]
+
+        # Before claim
+        assert not env.riichi_declared[3]
+
+        # Execute Pon
+        env.step({0: Action(ActionType.Pon, tile=108, consume_tiles=[109, 110])})
+
+        # After claim, riichi_declared should be True
+        assert env.riichi_declared[3]
+        # Also points should be deducted (25000 - 1000 = 24000)
+        assert env.scores()[3] == 24000

@@ -2,11 +2,164 @@
 <img src="docs/assets/logo.jpg" width="35%">
 </div>
 
+[![Rust Lint and Format](https://github.com/smly/RiichiEnv/actions/workflows/rustfmt_clippy.yml/badge.svg?branch=main)](https://github.com/smly/RiichiEnv/actions/workflows/rustfmt_clippy.yml)
+
+[![Python Unit Tests](https://github.com/smly/RiichiEnv/actions/workflows/pytest.yml/badge.svg?branch=main)](https://github.com/smly/RiichiEnv/actions/workflows/pytest.yml)
+
+[![Python Lint and Type Check](https://github.com/smly/RiichiEnv/actions/workflows/ruff_ty.yml/badge.svg?branch=main)](https://github.com/smly/RiichiEnv/actions/workflows/ruff_ty.yml)
+
 # RiichiEnv
 
-**A Modular, High-Performance Research Environment for Riichi Mahjong**
+**High-Performance Research Environment for Riichi Mahjong**
 
-他のライブラリとの違いや特徴
+注意：現在、まだ安定版のリリースに向けて開発中です。仕様が変更される可能性があります。
 
-* シミュレーションはシングルプロセスCPUで最適化する。並列実行のレースコンディションを避けるため。
-* 多様なルールをサポートする。赤ドラなし、三人麻雀など。
+## ✨ Features
+
+* **High-performance**: Rust implementation for fast state transitions and rollouts
+* **Gym-like API**: Design for reinforcement learning
+* **Compatible with Mortal**: Easy to connect with Mortal Bot using mjai protocol
+* **Various Rules**: Support for various rules. No red dragons, three-player mahjong, etc.
+
+## 📦 Installation
+
+For now, this package requires **Rust** to build the package.
+
+- [ ] TODO: Upload the binary wheel packages to PyPI.
+
+```bash
+uv add riichienv
+# Or
+pip install riichienv
+```
+
+## 🚀 Usage
+
+- [*] TODO: Support four-player single round game
+- [*] TODO: Support four-player tonpuu game with red dragons
+- [*] TODO: Support four-player hanchan game with red dragons
+- [ ] TODO: Support four-player hanchan game without red dragons
+- [ ] TODO: Support three-player game rules
+
+### Single Round Game
+
+```python
+from riichienv import RiichiEnv, GameType
+from riichienv.agents import RandomAgent
+
+agent = RandomAgent()
+env = RiichiEnv(game_type=GameType.FOUR_PLAYER_IKKYOKU)
+obs_dict = env.reset()
+while not env.done():
+    actions = {player_id: agent.act(obs)
+               for player_id, obs in obs_dict.items()}
+    obs_dict = env.step(actions)
+
+scores, points, ranks = env.scores(), env.points(), env.ranks()
+print(scores, points, ranks)
+```
+
+### Hanchan Game
+
+一般的なオンライン麻雀ルールと共通。喰アリ赤ルール。
+
+* 喰い断：あり、後付け：あり、飛び：あり
+* 西入サドンデスルール。必要持ち点30000点
+* 1翻縛り
+* 大三元と小四喜のみパオ（責任払い）あり
+* フリテンリーチあり
+
+`RiichiEnv` の引数 `game_type` を指定することでゲームのルールを切り替え可能。
+
+```python
+from riichienv import RiichiEnv, GameType
+from riichienv.agents import RandomAgent
+
+agent = RandomAgent()
+env = RiichiEnv(game_type=GameType.FOUR_PLAYER_HANCHAN)
+obs_dict = env.reset()
+while not env.done():
+    actions = {player_id: agent.act(obs)
+               for player_id, obs in obs_dict.items()}
+    obs_dict = env.step(actions)
+
+scores, points, ranks = env.scores(), env.points(), env.ranks()
+print(scores, points, ranks)
+```
+
+### Compatibility with Mortal
+
+Mortal の mjai Bot とイベント処理フローの互換性を持ちます。`obs.new_events()` により、行動可能になるまでの未読の mjai イベントを文字列形式で取得できます。
+`Agent` クラスの `act()` メソッドは `riichienv.action.Action` を返す必要があります。`obs.select_action_from_mjai()` メソッドを使うことで、mjai 形式のイベント文字列から選択可能な `Action` オブジェクトを選択することができます。
+
+```python
+from riichienv import RiichiEnv
+from riichienv.game_mode import GameType
+from riichienv.action import Action
+
+from model import load_model
+
+class MortalAgent:
+    def __init__(self, player_id: int):
+        self.player_id = player_id
+        # Load `libriichi.mjai.Bot` instance
+        self.model = load_model(player_id, "./mortal_v4.pth")
+
+    def act(self, obs) -> Action:
+        resp = None
+        for event in obs.new_events():
+            resp = self.model.react(event)
+
+        action = obs.select_action_from_mjai(resp)
+        assert action is not None, f"No response despite legal actions: {obs.legal_actions()}"
+        return action
+
+env = RiichiEnv(game_type=GameType.FOUR_PLAYER_HANCHAN, mjai_mode=True)
+agents = {pid: MortalAgent(pid) for pid in range(4)}
+obs_dict = env.reset()
+while not env.done():
+    actions = {pid: agents[pid].act(obs) for pid, obs in obs_dict.items()}
+    obs_dict = env.step(actions)
+
+scores, points, ranks = env.scores(), env.points(), env.ranks()
+print("FINISHED:", scores, points, ranks)
+```
+
+### Agari Calculation
+
+`mahjong` パッケージと互換性を持つインターフェースで役と点数計算をすることができます。
+
+```python
+TBD
+```
+
+### Tile Conversion
+
+136-tile format, mpsz format, mjai format など、牌の表現方法を変換することができます。
+
+```python
+import riichienv.convert as cvt
+```
+
+## Rust API
+
+Python interface のオーバーヘッドを避けたい用途に対して、Rust package として利用することもできます。
+
+- [ ] TODO: Upload the binary packages to crates.io.
+
+```rust
+cargo add riichienv
+```
+
+## 🛠 Development
+
+- **Python**: 3.13+
+- **Rust**: Nightly (recommended)
+- **Build System**: `maturin`
+- **OS**: MacOS, Windows, Linux
+
+See detail in [CONTRIBUTING.md](CONTRIBUTING.md) and [DEVELOPMENT.md](DEVELOPMENT.md).
+
+## LICENSE
+
+Apache License 2.0

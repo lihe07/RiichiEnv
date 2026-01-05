@@ -229,6 +229,8 @@ impl Observation {
                 } else if act.action_type != ActionType::Riichi
                     && act.action_type != ActionType::Tsumo
                     && act.action_type != ActionType::Ron
+                    && act.action_type != ActionType::Ankan
+                    && act.action_type != ActionType::Kakan
                 {
                     continue;
                 }
@@ -2576,19 +2578,51 @@ impl RiichiEnv {
                     }
 
                     // Ankan Check logic (complex restrictions during Riichi)
-                    // Simple check: if 4 tiles exist, and changing them doesn't change wait?
-                    // For now, if Python logic is simple, mimic it.
-                    // Python: `_riichienv.check_riichi_candidates(h14)`? No that's for declarations.
-                    // Python: `sum(1 for t in h14 if t // 4 == t_type) == 4`
-                    // Rust AgariCalculator doesn't check Ankan validity during Riichi explicitly?
-                    // Only logic: `t_type = self.drawn_tile // 4`.
-                    // If 4 matches, allow Ankan.
-                    // Note: Riichi Ankan rule is stricter, but let's stick to base logic.
+                    // Rule: Ankan is allowed ONLY IF it does not change the waits.
                     let t_type = dt / 4;
                     let matches: Vec<u8> =
                         h14.iter().cloned().filter(|&t| t / 4 == t_type).collect();
                     if matches.len() == 4 {
-                        actions.push(Action::new(ActionType::Ankan, Some(dt), matches));
+                        use crate::agari_calculator::AgariCalculator;
+                        let mut hand13 = hand.clone();
+                        if let Some(pos) = hand13.iter().position(|&x| x == dt) {
+                            hand13.remove(pos);
+                        }
+                        let mut old_waits =
+                            AgariCalculator::new(hand13, self.melds[pid as usize].clone())
+                                .get_waits();
+                        old_waits.sort();
+
+                        // Simulate ankan
+                        let mut next_melds = self.melds[pid as usize].clone();
+                        next_melds.push(Meld::new(MeldType::Angang, matches.clone(), false));
+                        let mut next_hand = hand.clone();
+                        for &m in &matches {
+                            if let Some(pos) = next_hand.iter().position(|&x| x == m) {
+                                next_hand.remove(pos);
+                            }
+                        }
+                        let mut new_waits = AgariCalculator::new(next_hand, next_melds).get_waits();
+                        new_waits.sort();
+
+                        if pid == 2 {
+                            println!("DEBUG RUST: pid=2 h14={:?}", h14);
+                            println!("DEBUG RUST: pid=2 t_type={} matches={:?}", t_type, matches);
+                            println!(
+                                "DEBUG RUST: pid=2 old_waits={:?} new_waits={:?}",
+                                old_waits, new_waits
+                            );
+                        }
+
+                        if !old_waits.is_empty() && old_waits == new_waits {
+                            actions.push(Action::new(ActionType::Ankan, Some(dt), matches));
+                        } else if pid == 2 {
+                            println!(
+                                "DEBUG RUST: pid=2 ANKAN BLOCKED: is_empty={} equal={}",
+                                old_waits.is_empty(),
+                                old_waits == new_waits
+                            );
+                        }
                     }
                 }
 
@@ -2599,6 +2633,14 @@ impl RiichiEnv {
             }
 
             // Normal Turn
+            if self.riichi_stage[pid as usize] {
+                // Must discard after declaring Riichi
+                for &t in &h14 {
+                    actions.push(Action::new(ActionType::Discard, Some(t), vec![]));
+                }
+                return actions;
+            }
+
             // 1. Kyushukyuhai
             // Condition: First turn (no discards by self) and no melds on board (uninterrupted)
             let is_first_turn_personal = self.discards[pid as usize].is_empty();
@@ -2737,6 +2779,24 @@ impl RiichiEnv {
         //     );
         // }
         use serde_json::Value; // Added use statement for Value
+                               // If the discarded tile was part of a Riichi declaration, accept it
+        if let Some(f_pid) = from_pid {
+            if self.riichi_stage[f_pid as usize] {
+                self.riichi_stage[f_pid as usize] = false;
+                self.riichi_declared[f_pid as usize] = true;
+                self.scores[f_pid as usize] -= 1000;
+                self.score_deltas[f_pid as usize] -= 1000;
+                self.riichi_sticks += 1;
+
+                let mut ev = serde_json::Map::new();
+                ev.insert(
+                    "type".to_string(),
+                    Value::String("reach_accepted".to_string()),
+                );
+                ev.insert("actor".to_string(), Value::Number(f_pid.into()));
+                self._push_mjai_event(Value::Object(ev));
+            }
+        }
         self.ippatsu_cycle = [false; 4]; // Any claim breaks Ippatsu for everyone
         let hand = &mut self.hands[pid as usize];
 

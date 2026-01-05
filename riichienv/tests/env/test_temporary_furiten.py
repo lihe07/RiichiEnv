@@ -162,7 +162,3 @@ def test_temporary_furiten_no_yaku():
         p1_acts_2 = [a for a in obs[pid].legal_actions() if a.type == ActionType.RON]
 
     assert not p1_acts_2, "P1 should NOT be able to Ron on 1m due to Temporary Furiten"
-
-
-if __name__ == "__main__":
-    test_temporary_furiten_no_yaku()
