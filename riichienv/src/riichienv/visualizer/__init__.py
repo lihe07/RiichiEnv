@@ -1,3 +1,3 @@
-from .viewer import show_replay
+from .viewer import show_replay, Replay
 
-__all__ = ["show_replay"]
+__all__ = ["show_replay", "Replay"]

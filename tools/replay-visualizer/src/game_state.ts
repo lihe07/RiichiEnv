@@ -3,22 +3,17 @@ import { MjaiEvent, PlayerState, BoardState } from './types';
 // Helper to sort hand (simple alphanumeric sort for now, ideally strictly by tile order)
 const sortHand = (hand: string[]) => {
     const order = (t: string) => {
-        // 1m..9m, 1p..9p, 1s..9s, 1z..7z. red (0/5xr) treated nicely?
-        // MJAI: 5mr, 5pr, 5sr.
         if (t === 'back') return 9999;
 
-        let suit = t.slice(-1); // m, p, s, z, r
+        const suit = t.slice(-1);
         let num = parseInt(t[0]);
+        if (t.endsWith('r') || t.startsWith('0')) num = 5;
 
-        // Handle red 5s: 5mr -> suit=r, but we want it near 5m.
-        if (t.endsWith('r')) {
-            suit = t.slice(-2, -1); // 'm' from '5mr'
-            num = 5;
-        }
+        const suitOrder: Record<string, number> = { 'm': 0, 'p': 100, 's': 200, 'z': 300 };
+        const isRed = t.endsWith('r') || t.startsWith('0');
+        const redOffset = isRed ? 0.1 : 0;
 
-        const suitOrder = { 'm': 0, 'p': 10, 's': 20, 'z': 30 };
-        // @ts-ignore
-        return (suitOrder[suit] || 0) * 10 + num + (t.endsWith('r') ? 0.5 : 0);
+        return (suitOrder[suit] || 0) + num + redOffset;
     };
     return [...hand].sort((a, b) => order(a) - order(b));
 };
@@ -36,6 +31,15 @@ export class GameState {
         this.events = events;
         this.cursor = 0;
         this.current = this.initialState();
+
+        // Skip initial events (start_game, etc.) and jump to first meaningful state
+        const firstKyoku = this.events.findIndex(e => e.type === 'start_kyoku');
+        if (firstKyoku !== -1) {
+            // Jump to firstKyoku + 1 to ensure the start_kyoku event is processed
+            this.jumpTo(firstKyoku + 1);
+        } else if (this.events.length > 2) {
+            this.jumpTo(2);
+        }
     }
 
     // Returns list of indices where new rounds start
@@ -69,7 +73,9 @@ export class GameState {
             honba: 0,
             kyotaku: 0,
             wallRemaining: 70,
-            currentActor: 0
+            currentActor: 0,
+            eventIndex: 0,
+            totalEvents: this.events.length
         };
     }
 
@@ -79,6 +85,7 @@ export class GameState {
         const event = this.events[this.cursor];
         this.processEvent(event);
         this.cursor++;
+        this.current.eventIndex = this.cursor; // Sync
         return true;
     }
 
@@ -106,33 +113,29 @@ export class GameState {
 
     // Jump to next/prev turn for a specific actor
     stepTurn(forward: boolean, actor: number) {
-        // We scan events from cursor
         let target = this.cursor;
         const len = this.events.length;
 
         if (forward) {
-            // scan forward until we find an event for this actor (tsumo or dahai?)
-            // Usually user wants to see their next draw/discard.
             for (let i = this.cursor + 1; i < len; i++) {
                 const e = this.events[i];
-                if (e.actor === actor && (e.type === 'tsumo' || e.type === 'dahai' || e.type === 'pon' || e.type === 'chi' || e.type === 'kan')) {
+                if (e.actor === actor && ['tsumo', 'dahai', 'pon', 'chi', 'kan', 'daiminkan', 'kakan', 'ankan'].includes(e.type)) {
                     target = i;
                     break;
                 }
             }
-            this.jumpTo(target);
         } else {
-            // scan backward
-            for (let i = this.cursor - 1; i >= 0; i--) {
+            // Step back once to avoid staying on current event if we are on an actor's event
+            for (let i = this.cursor - 2; i >= 0; i--) {
                 const e = this.events[i];
-                // If we land exactly on start of turn usually tsumo?
-                if (e.actor === actor && (e.type === 'tsumo' || e.type === 'dahai' || e.type === 'pon' || e.type === 'chi' || e.type === 'kan')) {
+                if (e.actor === actor && ['tsumo', 'dahai', 'pon', 'chi', 'kan', 'daiminkan', 'kakan', 'ankan'].includes(e.type)) {
                     target = i;
                     break;
                 }
             }
-            this.jumpTo(target);
         }
+        // Jump to index + 1 to show the STATE AFTER the action
+        this.jumpTo(target + 1);
     }
 
     reset() {
@@ -157,6 +160,9 @@ export class GameState {
                     p.riichi = false;
                     p.pendingRiichi = false;
                     p.score = e.scores[i];
+                    p.waits = undefined;
+                    // Assign wind based on oya
+                    p.wind = (i - e.oya + 4) % 4;
                 });
                 break;
 
@@ -178,12 +184,13 @@ export class GameState {
 
                     // Riichi Logic
                     let isRiichi = false;
-                    if (p.pendingRiichi) {
+                    if (p.pendingRiichi || e.reach) {
                         isRiichi = true;
-                        p.pendingRiichi = false; // Consumed (unless stolen later)
+                        p.pendingRiichi = false;
                     }
 
-                    p.discards.push({ tile: e.pai, isRiichi });
+                    p.discards.push({ tile: e.pai, isRiichi, isTsumogiri: !!e.tsumogiri });
+                    p.waits = e.meta?.waits;
                     this.current.currentActor = e.actor;
                 }
                 break;
@@ -204,6 +211,8 @@ export class GameState {
                         tiles: [...e.consumed, e.pai],
                         from: e.target
                     });
+
+                    p.waits = undefined;
 
                     this.current.currentActor = e.actor;
 
@@ -232,6 +241,7 @@ export class GameState {
                         tiles: e.consumed, // all tiles involved
                         from: e.actor
                     });
+                    p.waits = undefined; // Clear waits
                 }
                 break;
 
@@ -244,6 +254,7 @@ export class GameState {
                         this.current.players[e.actor].riichi = true;
                         this.current.kyotaku += 1;
                         this.current.players[e.actor].score -= 1000;
+                        this.current.players[e.actor].pendingRiichi = false;
                     }
                 }
                 break;

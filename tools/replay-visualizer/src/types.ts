@@ -4,12 +4,23 @@ export interface MjaiEvent {
     target?: number;
     pai?: string;
     consumed?: string[];
+    meta?: {
+        waits?: string[];
+        score?: {
+            han: number;
+            fu: number;
+            points: number;
+            yaku: number[];
+        };
+        [key: string]: any;
+    };
     [key: string]: any;
 }
 
 export interface Tile {
     tile: string;
     isRiichi?: boolean;
+    isTsumogiri?: boolean;
 }
 
 export interface PlayerState {
@@ -20,6 +31,7 @@ export interface PlayerState {
     riichi: boolean;
     pendingRiichi?: boolean; // Waiting for discard to mark as riichi
     wind: number;
+    waits?: string[];
 }
 
 export interface BoardState {
@@ -31,4 +43,6 @@ export interface BoardState {
     wallRemaining: number;
     currentActor: number;
     lastEvent?: MjaiEvent;
+    eventIndex: number;
+    totalEvents: number;
 }

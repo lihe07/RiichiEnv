@@ -57,7 +57,7 @@ export class Viewer {
         this.controlPanel.style.alignItems = 'center';
 
         const rowStyle = "display: flex; gap: 10px; align-items: center; justify-content: center; margin-bottom: 8px; flex-wrap: wrap;";
-        const btnStyle = "padding: 6px 12px; cursor: pointer; border: 1px solid #ccc; background: white; border-radius: 4px; font-weight: bold; font-family: sans-serif;";
+        const btnStyle = "padding: 6px 12px; cursor: pointer; border: 1px solid #ccc; background: white; border-radius: 4px; font-weight: bold; font-family: sans-serif; user-select: none;";
 
         const createBtn = (lbl: string, cb: () => void, title?: string) => {
             const b = document.createElement('button');
