@@ -56,7 +56,7 @@ class MetadataInjector:
         """Find a tile in hand that matches the tile_str type."""
         target_base = cvt.mjai_to_tid(tile_str)
         # Check for exact match first (e.g. Red vs Non-Red)
-        # convert.mpai_to_tid handles '5mr' -> 16, '5m' -> 17.
+        # cvt.mpai_to_tid handles '5mr' -> 16, '5m' -> 17.
         # But ID 17 is just one of 17,18,19.
 
         # Helper to check if ID is red
