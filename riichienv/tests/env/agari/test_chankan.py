@@ -1,69 +1,58 @@
 from riichienv import Action, ActionType, Meld, MeldType, Phase, RiichiEnv, convert, parse_hand
 
+from ..helper import helper_setup_env
+
 
 class TestChankan:
     def test_chankan_ron(self):
         """
         Verify standard Chankan Ron when a player performs KAKAN.
         """
-        # Use GameType=0 (Ikkyoku) so game ends after one hand
-        env = RiichiEnv(seed=42, game_type=0)
-        env.reset()
+        env = helper_setup_env(
+            hands=[
+                list(parse_hand("02346789m01234p")[0]),
+                list(parse_hand("23m11234567p")[0]),
+                [],
+                [],
+            ],
+            melds=[
+                [Meld(MeldType.Peng, tiles=[0, 1, 2], opened=True)],
+                [Meld(MeldType.Peng, tiles=list(parse_hand("333z")[0]), opened=True)],
+                [],
+                [],
+            ],
+            game_type=0,  # game ends after one hand
+            drawn_tile=3,
+            current_player=0,
+            phase=Phase.WaitAct,
+            active_players=[0],
+        )
 
-        # Player 0: Performs KAKAN of 1m
-        h = env.hands
-        h[0] = list(parse_hand("02346789m01234p")[0])
-        env.hands = h
-
-        m = env.melds
-        m[0] = [Meld(MeldType.Peng, tiles=[0, 1, 2], opened=True)]
-        env.melds = m
-
-        env.drawn_tile = 3  # The 4th 1m
-
-        # Player 1: Waits for 1m, has Red Dragon Pon for Yaku
-        # Hand: 1m, 1m (4, 5) ...
-        # Wait: 1m (Shanpon wait or similar)
-        # Actually let's make it easy: 2m, 3m in hand, wait is 1m, 4m (Ryanmen).
-        h = env.hands
-        h[1] = list(parse_hand("23m11223344p")[0])
-        env.hands = h
-        # 10 tiles + 3 in meld = 13.
-        m = env.melds
-        m[1] = [Meld(MeldType.Peng, tiles=[132, 133, 134], opened=True)]  # Red Dragon
-        env.melds = m
-
-        env.current_player = 0
-        env.phase = Phase.WaitAct
-        env.active_players = [0]
-
-        # Player 0 performs KAKAN
-        kakan_action = Action(ActionType.KAKAN, tile=3, consume_tiles=[3])
+        # Player 0 performs Kakan
+        kakan_action = Action(ActionType.Kakan, tile=3, consume_tiles=[3])
         obs_dict = env.step({0: kakan_action})
 
         # Env should transition to WaitResponse for Player 1
         assert env.phase == Phase.WaitResponse, f"Expected WaitResponse, got {env.phase}"
-        assert 1 in env.active_players
-        assert 1 in obs_dict
+        assert env.active_players == [1]
+        assert list(obs_dict.keys()) == [1]
 
-        # Player 1 should have RON action
+        # Player 1 should have Ron action
         legal_actions = obs_dict[1].legal_actions()
-        ron_actions = [a for a in legal_actions if a.action_type == ActionType.RON]
-        assert len(ron_actions) > 0, f"No RON actions found. Legal actions: {legal_actions}"
+        ron_actions = [a for a in legal_actions if a.action_type == ActionType.Ron]
+        assert len(ron_actions) > 0, f"No Ron actions found. Legal actions: {legal_actions}"
         assert ron_actions[0].tile == 3
 
-        # Player 1 performs RON
-        print("Executing RON action...")
+        # Player 1 performs Ron
         env.step({1: ron_actions[0]})
-        print(f"Post-RON: is_done={env.is_done}, agari_results={env.agari_results.keys()}")
 
         # Check result
-        assert env.is_done, "Env should be done after RON"
+        assert env.done(), "Env should be done after Ron"
         assert 1 in env.agari_results
         res = env.agari_results[1]
         assert res.agari
         # Chankan yaku (ID 3)
-        assert 3 in res.yaku
+        assert res.yaku == [3]
 
     def test_chankan_pass(self):
         """

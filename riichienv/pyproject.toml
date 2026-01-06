@@ -81,4 +81,4 @@ root_packages = ["riichienv"]
 
 [tool.ty.environment]
 python = "./.venv"
-root = ["./src"]
+root = ["./src", "."]

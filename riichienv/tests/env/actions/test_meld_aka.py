@@ -6,7 +6,8 @@ from riichienv import RiichiEnv
 
 @pytest.mark.skip(reason="Legacy python test - Rust implementation pending or parity missing")
 def test_can_pon_aka():
-    env = RiichiEnv()
+    env = RiichiEnv(seed=42)
+    env.reset()
 
     # Rank 4 is 5m. IDs: 16(aka), 17, 18, 19
     aka_5m = 16
