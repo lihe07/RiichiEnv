@@ -405,7 +405,7 @@ class Replay:
             }} else {{
                 const b64Data = "{viewer_js_b64}";
                 const compressed = Uint8Array.from(atob(b64Data), c => c.charCodeAt(0));
-                
+
                 if (window.DecompressionStream) {{
                     const ds = new DecompressionStream('gzip');
                     const decompressedStream = new Response(compressed).body.pipeThrough(ds);
