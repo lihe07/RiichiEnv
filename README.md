@@ -5,6 +5,8 @@
 [![rustfmt and clippy](https://github.com/smly/RiichiEnv/actions/workflows/rustfmt_clippy.yml/badge.svg?branch=main)](https://github.com/smly/RiichiEnv/actions/workflows/rustfmt_clippy.yml)
 [![pytest](https://github.com/smly/RiichiEnv/actions/workflows/pytest.yml/badge.svg?branch=main)](https://github.com/smly/RiichiEnv/actions/workflows/pytest.yml)
 [![ruff and ty](https://github.com/smly/RiichiEnv/actions/workflows/ruff_ty.yml/badge.svg?branch=main)](https://github.com/smly/RiichiEnv/actions/workflows/ruff_ty.yml)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/smly/RiichiEnv/riichienv/notebooks/riichienv.ipynb)
+[![Kaggle](https://kaggle.com/static/images/open-in-kaggle.svg)](https://kaggle.com/kernels/welcome?src=https://github.com/smly/RiichiEnv/riichienv/notebooks/riichienv.ipynb)
 ![License](https://img.shields.io/crates/l/daberu)
 
 # RiichiEnv

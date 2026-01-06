@@ -1,11 +1,18 @@
 {
+    "python.languageServer": "None",
+    "ty.importStrategy": "fromEnvironment",
+    "ty.interpreter": [
+        "${workspaceFolder}/riichienv/.venv/bin/python"
+    ],
     "[python]": {
         "editor.defaultFormatter": "charliermarsh.ruff",
         "editor.formatOnSave": true,
+        "editor.formatOnPaste": false,
+        "editor.formatOnType": false,
+        "editor.formatOnSaveMode": "file",
         "editor.codeActionsOnSave": {
             "source.fixAll": "explicit",
             "source.organizeImports": "explicit"
         }
     },
-    "ruff.lint.args": []
 }
