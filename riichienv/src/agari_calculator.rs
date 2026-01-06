@@ -1,6 +1,7 @@
+#![allow(clippy::useless_conversion)]
 use crate::agari;
 use crate::score;
-use crate::types::{Agari, Conditions, Hand, Meld, MeldType};
+use crate::types::{Agari, Conditions, Hand, Meld, MeldType, Wind};
 use crate::yaku;
 use pyo3::prelude::*;
 
@@ -14,13 +15,18 @@ pub struct AgariCalculator {
 
 #[pymethods]
 impl AgariCalculator {
+    #[staticmethod]
+    pub fn hand_from_text(text: &str) -> PyResult<Self> {
+        let (tiles, melds) = crate::parser::parse_hand(text)?;
+        Ok(Self::new(tiles, melds))
+    }
     #[new]
     #[pyo3(signature = (tiles_136, melds=vec![]))]
     pub fn new(tiles_136: Vec<u8>, mut melds: Vec<Meld>) -> Self {
         let mut aka_dora_count = 0;
         let mut tiles_34 = Vec::with_capacity(tiles_136.len());
 
-        for t in tiles_136 {
+        for &t in &tiles_136 {
             if t == 16 || t == 52 || t == 88 {
                 aka_dora_count += 1;
             }
@@ -66,13 +72,16 @@ impl AgariCalculator {
         }
     }
 
+    #[pyo3(signature = (win_tile, dora_indicators=vec![], ura_indicators=vec![], conditions=None))]
     pub fn calc(
         &self,
-        win_tile_136: u8,
+        win_tile: u8, // Renamed from win_tile_136
         dora_indicators: Vec<u8>,
         ura_indicators: Vec<u8>,
-        conditions: Conditions,
+        conditions: Option<Conditions>,
     ) -> Agari {
+        let win_tile_136 = win_tile;
+        let conditions = conditions.unwrap_or_default();
         let win_tile_34 = win_tile_136 / 4;
 
         // Clone and add win tile to create 14-tile hands for check
@@ -97,7 +106,7 @@ impl AgariCalculator {
                 win_tile_136, conditions.houtei, conditions.haitei, conditions.tsumo
             );
         }
-        let is_agari = agari::is_agari(&hand_14);
+        let is_agari = agari::is_agari(&mut hand_14);
 
         if !is_agari {
             return Agari::new(false, false, 0, 0, 0, vec![], 0, 0);
@@ -136,19 +145,24 @@ impl AgariCalculator {
             dora_count,
             aka_dora,
             ura_dora_count,
-            bakaze: 27 + conditions.round_wind,
-            jikaze: 27 + conditions.player_wind,
+            bakaze: 27 + conditions.round_wind as u8,
+            jikaze: 27 + conditions.player_wind as u8,
             is_menzen: self.melds.iter().all(|m| !m.opened),
         };
 
         let _divisions = agari::find_divisions(&hand_14);
         let yaku_res = yaku::calculate_yaku(&hand_14, &self.melds, &ctx, win_tile_34);
 
-        let is_oya = conditions.player_wind == 0;
+        let is_oya = conditions.player_wind == Wind::East;
         let score_res = score::calculate_score(yaku_res.han, yaku_res.fu, is_oya, conditions.tsumo);
 
+        let has_yaku = yaku_res
+            .yaku_ids
+            .iter()
+            .any(|&id| id != yaku::ID_DORA && id != yaku::ID_AKADORA && id != yaku::ID_URADORA);
+
         Agari {
-            agari: !yaku_res.yaku_ids.is_empty() || yaku_res.yakuman_count > 0,
+            agari: (has_yaku || yaku_res.yakuman_count > 0) && yaku_res.han >= 1, // Ensure at least 1 han even if just from Yaku (implicit)
             yakuman: yaku_res.yakuman_count > 0,
             ron_agari: score_res.pay_ron,
             tsumo_agari_oya: score_res.pay_tsumo_oya,
@@ -164,16 +178,36 @@ impl AgariCalculator {
         if current_total != 13 {
             return false;
         }
+        let mut hand_14 = self.hand.clone();
         for i in 0..crate::types::TILE_MAX {
-            let mut hand_14 = self.hand.clone();
             if hand_14.counts[i] < 4 {
                 hand_14.add(i as u8);
-                if agari::is_agari(&hand_14) {
+                if agari::is_agari(&mut hand_14) {
                     return true;
                 }
+                hand_14.remove(i as u8);
             }
         }
         false
+    }
+
+    pub fn get_waits(&self) -> Vec<u8> {
+        let mut waits = Vec::new();
+        let current_total: u8 = self.hand.counts.iter().sum::<u8>() + (self.melds.len() as u8 * 3);
+        if current_total != 13 {
+            return waits;
+        }
+        let mut hand_14 = self.hand.clone();
+        for i in 0..crate::types::TILE_MAX {
+            if hand_14.counts[i] < 4 {
+                hand_14.add(i as u8);
+                if crate::agari::is_agari(&mut hand_14) {
+                    waits.push(i as u8);
+                }
+                hand_14.remove(i as u8);
+            }
+        }
+        waits
     }
 }
 

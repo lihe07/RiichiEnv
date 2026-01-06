@@ -16,7 +16,26 @@ cd riichienv
 uv sync --dev
 ```
 
+## Pre-commit
+
+```bash
+❯ cd riichienv
+❯ uv run pre-commit run --config ../.pre-commit-config.yaml
+rustfmt..................................................................Passed
+clippy...................................................................Passed
+ruff-check...............................................................Passed
+ty-check.................................................................Passed
+pytest...................................................................Passed
+ruff-format..............................................................Passed
+```
+
 ## Rust Development
+
+### Setup Rust Environment
+
+```bash
+❯ curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
+```
 
 ### Compilation Check
 To check if the Rust code compiles:

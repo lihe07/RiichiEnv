@@ -14,14 +14,14 @@ mod unit_tests {
             9, 10, 11, // 123p (mapped to 9,10,11)
             18, 18, // 1s pair (mapped to 18)
         ];
-        let hand = Hand::new(Some(tiles.to_vec()));
-        assert!(is_agari(&hand), "Should be agari");
+        let mut hand = Hand::new(Some(tiles.to_vec()));
+        assert!(is_agari(&mut hand), "Should be agari");
     }
 
     #[test]
     fn test_basic_pinfu() {
         // 123m 456m 789m 123p 11s
-        // m: 0-8, p: 9-17, s: 18-26
+        // m: 0-8, p: 9-17, s: 18-26_
         // 123p -> 9, 10, 11
         // 11s -> 18, 18
         let mut hand = Hand::new(None);
@@ -45,7 +45,7 @@ mod unit_tests {
         hand.add(18);
         hand.add(18);
 
-        assert!(is_agari(&hand));
+        assert!(is_agari(&mut hand));
     }
 
     #[test]
@@ -57,7 +57,7 @@ mod unit_tests {
             hand.add(t);
         }
         assert!(is_chiitoitsu(&hand));
-        assert!(is_agari(&hand));
+        assert!(is_agari(&mut hand));
     }
 
     #[test]
@@ -70,7 +70,7 @@ mod unit_tests {
         }
         hand.add(0); // Double 1m
         assert!(is_kokushi(&hand));
-        assert!(is_agari(&hand));
+        assert!(is_agari(&mut hand));
     }
 
     #[test]

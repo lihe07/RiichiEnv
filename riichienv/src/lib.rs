@@ -1,5 +1,10 @@
 use pyo3::prelude::*;
 
+use mimalloc::MiMalloc;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
+
 mod agari;
 mod agari_calculator;
 mod score;
@@ -7,6 +12,7 @@ mod tests;
 mod types;
 mod yaku;
 
+mod env;
 mod parser;
 mod replay;
 
@@ -39,7 +45,7 @@ fn check_riichi_candidates(tiles_136: Vec<u8>) -> Vec<u8> {
             }
         }
 
-        if agari::is_tenpai(&hand) {
+        if agari::is_tenpai(&mut hand) {
             candidates.push(t_discard);
         }
     }
@@ -60,6 +66,14 @@ fn _riichienv(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<replay::KyokuIterator>()?;
     m.add_class::<replay::AgariContext>()?;
     m.add_class::<replay::AgariContextIterator>()?;
+
+    // Env classes
+    m.add_class::<env::ActionType>()?;
+    m.add_class::<env::Phase>()?;
+    m.add_class::<env::Action>()?;
+    m.add_class::<env::Observation>()?;
+    m.add_class::<env::RiichiEnv>()?;
+
     m.add_function(wrap_pyfunction!(score::calculate_score, m)?)?;
     m.add_function(wrap_pyfunction!(parser::parse_hand, m)?)?;
     m.add_function(wrap_pyfunction!(parser::parse_tile, m)?)?;

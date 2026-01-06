@@ -3,14 +3,16 @@ import sys
 from unittest.mock import MagicMock
 
 # Ensure we can import from scripts
-# Assuming running from repo root
-sys.path.append(os.path.join(os.getcwd(), "scripts"))
+# Assuming structure: riichienv/tests/test_verifier_daiminkan.py
+# scripts is in riichienv/scripts
+current_dir = os.path.dirname(os.path.abspath(__file__))
+scripts_dir = os.path.join(current_dir, "..", "scripts")
+sys.path.append(scripts_dir)
 
-from verify_gym_api_with_mjsoul import MjsoulEnvVerifier
+from verify_gym_api_with_mjsoul import MjsoulEnvVerifier  # noqa: E402
 
-import riichienv.convert as cvt
-from riichienv import RiichiEnv
-from riichienv.action import Action, ActionType
+import riichienv.convert as cvt  # noqa: E402
+from riichienv import Action, ActionType  # noqa: E402
 
 
 class TestVerifierSmartScan:
@@ -21,8 +23,11 @@ class TestVerifierSmartScan:
         """
         # 1. Setup Verifier and Env
         verifier = MjsoulEnvVerifier(verbose=True)
-        env = RiichiEnv(seed=42)
-        env.reset()
+        # env = RiichiEnv(seed=42) # Cannot use real Rust env for mocking step
+        env = MagicMock()
+        # env.reset() # Mock relies on attrs
+        env.hands = [[], [], [], []]
+
         verifier.env = env
 
         # 2. Setup P0 hand with non-canonical 1z (East)
@@ -74,7 +79,7 @@ class TestVerifierSmartScan:
 
         # 6. Verify Action
         assert captured_action is not None
-        assert captured_action.type == ActionType.DAIMINKAN
+        assert captured_action.action_type == ActionType.DAIMINKAN
         assert captured_action.tile == tid_1z_canonical  # Target 108 (implied from 1z)
 
         expected_consumed = [109, 110, 111]

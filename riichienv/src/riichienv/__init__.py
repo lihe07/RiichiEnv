@@ -4,7 +4,10 @@ from ._riichienv import (  # type: ignore
     Kyoku,
     Meld,
     MeldType,
+    Observation,
+    Phase,
     ReplayGame,
+    RiichiEnv,
     Score,
     Wind,
     calculate_score,
@@ -12,7 +15,6 @@ from ._riichienv import (  # type: ignore
     parse_tile,
 )
 from .action import Action, ActionType
-from .env import Phase, RiichiEnv
 from .game_mode import GameType
 from .hand import Agari, AgariCalculator, Conditions
 
@@ -28,6 +30,7 @@ __all__ = [
     "Kyoku",
     "Meld",
     "MeldType",
+    "Observation",
     "ReplayGame",
     "Score",
     "Wind",

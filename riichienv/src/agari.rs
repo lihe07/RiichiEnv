@@ -12,22 +12,55 @@ pub struct Division {
     pub body: Vec<Mentsu>,
 }
 
-pub fn is_tenpai(hand: &Hand) -> bool {
+pub fn is_tenpai(hand: &mut Hand) -> bool {
     // Try adding each tile 0..34
     // If is_agari becomes true, then it is tenpai.
     for i in 0..crate::types::TILE_MAX {
-        let mut processing_hand = hand.clone();
-        if processing_hand.counts[i] < 4 {
-            processing_hand.add(i as u8);
-            if is_agari(&processing_hand) {
+        if hand.counts[i] < 4 {
+            hand.add(i as u8);
+
+            // Fast checks first
+            if is_kokushi(hand) {
+                hand.remove(i as u8);
                 return true;
             }
+            if is_chiitoitsu(hand) {
+                hand.remove(i as u8);
+                return true;
+            }
+
+            // Pruning for standard agari:
+            // Only relevant if the added tile 'i' forms a pair or mentsu.
+            // This usually requires neighbors or existing count >= 2.
+            let c = hand.counts[i];
+            let check_standard = if i >= 27 {
+                c >= 2
+            } else {
+                let has_p = if i % 9 > 0 {
+                    hand.counts[i - 1] > 0
+                } else {
+                    false
+                };
+                let has_n = if i % 9 < 8 {
+                    hand.counts[i + 1] > 0
+                } else {
+                    false
+                };
+                c >= 2 || has_p || has_n
+            };
+
+            if check_standard && is_standard_agari(hand) {
+                hand.remove(i as u8);
+                return true;
+            }
+
+            hand.remove(i as u8); // backtrack
         }
     }
     false
 }
 
-pub fn is_agari(hand: &Hand) -> bool {
+pub fn is_agari(hand: &mut Hand) -> bool {
     if is_kokushi(hand) {
         return true;
     }
@@ -143,18 +176,19 @@ pub fn is_chiitoitsu(hand: &Hand) -> bool {
     pairs == 7
 }
 
-pub fn is_standard_agari(hand: &Hand) -> bool {
+pub fn is_standard_agari(hand: &mut Hand) -> bool {
     // Basic backtracking
     // 1. Find a pair (head)
     // 2. Decompose rest into 4 sequences/triplets
 
     for i in 0..TILE_MAX {
         if hand.counts[i] >= 2 {
-            let mut processing_hand = hand.clone();
-            processing_hand.counts[i] -= 2;
-            if decompose(&mut processing_hand, 0) {
+            hand.counts[i] -= 2;
+            if decompose(hand, 0) {
+                hand.counts[i] += 2; // backtrack
                 return true;
             }
+            hand.counts[i] += 2; // backtrack
         }
     }
     false
@@ -175,6 +209,7 @@ fn decompose(hand: &mut Hand, start_idx: usize) -> bool {
     if hand.counts[i] >= 3 {
         hand.counts[i] -= 3;
         if decompose(hand, i) {
+            hand.counts[i] += 3; // backtrack even on success
             return true;
         }
         hand.counts[i] += 3; // backtrack
@@ -195,6 +230,9 @@ fn decompose(hand: &mut Hand, start_idx: usize) -> bool {
                 hand.counts[i + 2] -= 1;
                 if decompose(hand, i) {
                     // Stay at i, might have more runs
+                    hand.counts[i] += 1;
+                    hand.counts[i + 1] += 1;
+                    hand.counts[i + 2] += 1;
                     return true;
                 }
                 // backtrack

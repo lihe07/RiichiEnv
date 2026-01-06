@@ -1,7 +1,8 @@
+#![allow(clippy::useless_conversion)]
 use flate2::read::GzDecoder;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods};
 
 use serde::{Deserialize, Serialize};
 // use serde_json::Value; // Unused
@@ -362,7 +363,7 @@ impl Kyoku {
         Ok(AgariContextIterator::new(self.clone()))
     }
 
-    fn events(&self, py: Python) -> PyResult<PyObject> {
+    fn events(&self, py: Python) -> PyResult<Py<PyAny>> {
         let events = PyList::empty(py);
 
         // Name: NewRound
@@ -1050,8 +1051,8 @@ impl AgariContextIterator {
                             rinshan: self.rinshan[seat],
                             chankan: is_chankan,
                             tsumo_first_turn: self.is_first_turn[seat] && is_zimo,
-                            player_wind: ((seat + 4 - self.kyoku.ju as usize) % 4) as u8,
-                            round_wind: self.kyoku.chang,
+                            player_wind: (((seat + 4 - self.kyoku.ju as usize) % 4) as u8).into(),
+                            round_wind: self.kyoku.chang.into(),
                             kyoutaku: 0, // Not tracked in basic loop?
                             tsumi: 0,    // Not tracked
                         };
@@ -1077,7 +1078,7 @@ impl AgariContextIterator {
                                 win_tile,
                                 dora_indicators.clone(),
                                 ura_indicators.clone(),
-                                conditions.clone(),
+                                Some(conditions.clone()),
                             )
                         };
 
@@ -1181,7 +1182,7 @@ impl AgariContext {
             self.agari_tile,
             self.dora_indicators.clone(),
             self.ura_indicators.clone(),
-            cond,
+            Some(cond),
         )
     }
 }

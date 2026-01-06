@@ -1,30 +1,16 @@
-from dataclasses import dataclass, field
-from enum import IntEnum
+from ._riichienv import Action, ActionType  # type: ignore
 
+__all__ = ["Action", "ActionType"]
 
-class ActionType(IntEnum):
-    DISCARD = 0
-    CHI = 1
-    PON = 2
-    DAIMINKAN = 3  # Open Kan
-    RON = 4  # Claim win
-    RIICHI = 5  # Declare Riichi
-    TSUMO = 6  # Self-draw win
-    PASS = 7  # Pass on claim
-    ANKAN = 8  # Closed Kan
-    KAKAN = 9  # Add Kan (Chankan)
-    KYUSHU_KYUHAI = 10  # Nine Terminal Abortive Draw
-
-
-@dataclass
-class Action:
-    type: ActionType
-    tile: int | None = None  # For Discard (tile 136 id) or Claim (target tile if needed)
-    consume_tiles: list[int] = field(default_factory=list)  # For Meld (tiles from hand to use)
-
-    def to_dict(self):
-        return {"type": self.type.value, "tile": self.tile, "consume_tiles": self.consume_tiles}
-
-    @staticmethod
-    def from_dict(d):
-        return Action(type=ActionType(d["type"]), tile=d.get("tile"), consume_tiles=d.get("consume_tiles", []))
+# Uppercase aliases for backward compatibility
+ActionType.DISCARD = ActionType.Discard
+ActionType.CHI = ActionType.Chi
+ActionType.PON = ActionType.Pon
+ActionType.DAIMINKAN = ActionType.Daiminkan
+ActionType.RON = ActionType.Ron
+ActionType.RIICHI = ActionType.Riichi
+ActionType.TSUMO = ActionType.Tsumo
+ActionType.PASS = ActionType.Pass
+ActionType.ANKAN = ActionType.Ankan
+ActionType.KAKAN = ActionType.Kakan
+ActionType.KYUSHU_KYUHAI = ActionType.KyushuKyuhai

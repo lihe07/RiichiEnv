@@ -6,6 +6,8 @@ from ._riichienv import (  # type: ignore
     Wind,
 )
 
+WINDS = [Wind.East, Wind.South, Wind.West, Wind.North]
+
 
 @dataclass
 class Yaku:
@@ -182,12 +184,13 @@ class AgariCalculator:
     def calc_from_text(
         hand_str_repr_with_win_tile: str,
         dora_indicators: str | None = None,
-        conditions: Conditions = Conditions(),
+        conditions: Conditions | None = None,
         ura_indicators: str | None = None,
     ) -> Agari:
         """
         hand_str_repr_with_win_tile: str は 14 枚分の牌を想定する。最後の1枚を win_tile として扱う。
         """
+        conditions = conditions or Conditions()
         tiles, melds = rust_core.parse_hand(hand_str_repr_with_win_tile)
         if not tiles and not melds:
             raise ValueError("Empty hand")
@@ -266,7 +269,7 @@ class AgariCalculator:
             res += "".join(map(str, honors)) + "z"
         return res
 
-    def _meld_to_string(self, meld: Meld) -> str:
+    def _meld_to_string(self, meld: Meld) -> str:  # noqa: PLR0915
         # Reconstruct string from Meld
         # (XYZCI)
         # Meld has tiles[].
@@ -347,13 +350,23 @@ class AgariCalculator:
         self,
         win_tile: int,
         dora_indicators: list[int] | None = None,
-        conditions: Conditions = Conditions(),
+        conditions: Conditions | None = None,
         ura_indicators: list[int] | None = None,
     ) -> Agari:
+        conditions = conditions or Conditions()
         if dora_indicators is None:
             dora_indicators = []
         if ura_indicators is None:
             ura_indicators = []
+        # Convert winds to Rust Wind enum if they are integers
+        p_wind = conditions.player_wind
+        if isinstance(p_wind, int):
+            p_wind = WINDS[p_wind % 4]
+
+        r_wind = conditions.round_wind
+        if isinstance(r_wind, int):
+            r_wind = WINDS[r_wind % 4]
+
         rust_conditions = rust_core.Conditions(
             tsumo=conditions.tsumo,
             riichi=conditions.riichi,
@@ -364,8 +377,8 @@ class AgariCalculator:
             rinshan=conditions.rinshan,
             chankan=conditions.chankan,
             tsumo_first_turn=conditions.tsumo_first_turn,
-            player_wind=int(conditions.player_wind),
-            round_wind=int(conditions.round_wind),
+            player_wind=p_wind,
+            round_wind=r_wind,
             kyoutaku=conditions.kyoutaku,
             tsumi=conditions.tsumi,
         )
