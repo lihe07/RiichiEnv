@@ -149,7 +149,7 @@ export class Viewer {
             const tr = document.createElement('tr');
             tr.className = 'kyoku-row';
             tr.onclick = () => {
-                this.gameState.jumpTo(cp.index);
+                this.gameState.jumpTo(cp.index + 1);
                 this.update();
                 overlay.remove();
             };

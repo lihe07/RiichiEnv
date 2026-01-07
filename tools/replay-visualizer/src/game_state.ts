@@ -55,17 +55,15 @@ export class GameState {
     current: BoardState;
 
     constructor(events: MjaiEvent[]) {
-        this.events = events;
+        // Filter out null events and start/end game events
+        this.events = events.filter(e => e && e.type !== 'start_game' && e.type !== 'end_game');
         this.cursor = 0;
         this.current = this.initialState();
 
-        // Skip initial events (start_game, etc.) and jump to first meaningful state
+        // Jump to first meaningful state (start_kyoku + 1)
         const firstKyoku = this.events.findIndex(e => e.type === 'start_kyoku');
         if (firstKyoku !== -1) {
-            // Jump to firstKyoku + 1 to ensure the start_kyoku event is processed
             this.jumpTo(firstKyoku + 1);
-        } else if (this.events.length > 2) {
-            this.jumpTo(2);
         }
     }
 
@@ -118,7 +116,8 @@ export class GameState {
     }
 
     stepBackward(): boolean {
-        if (this.cursor <= 0) return false;
+        // Prevent going back to 0 (before first start_kyoku)
+        if (this.cursor <= 1) return false;
         const target = this.cursor - 1;
         this.reset();
         while (this.cursor < target) {
@@ -128,7 +127,7 @@ export class GameState {
     }
 
     jumpTo(index: number) {
-        if (index < 0) index = 0;
+        if (index < 1) index = 1; // Enforce minimum 1
         if (index > this.events.length) index = this.events.length;
 
         if (index < this.cursor) {
