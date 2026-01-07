@@ -1,8 +1,0 @@
-**/*.pyc
-**/*.so
-target
-trunk
-# *.txt
-data
-# *.log
-# kyoku*.json

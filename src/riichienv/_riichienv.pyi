@@ -49,7 +49,7 @@ class ActionType:
 class Action:
     action_type: ActionType
     tile: int
-    consume_tiles: bytes
+    consume_tiles: list[int]
 
     def __init__(self, action_type: ActionType, tile: int = 0, consume_tiles: list[int] = []): ...
     def to_dict(self) -> dict[str, Any]: ...
@@ -130,7 +130,7 @@ class AgariCalculator:
     def is_tenpai(self) -> bool: ...
     def get_waits(self) -> list[int]: ...
     @staticmethod
-    def hand_from_text(text: str) -> tuple[list[int], list[Meld]]: ...
+    def hand_from_text(text: str) -> AgariCalculator: ...
 
 class Observation:
     events: list[Any]
@@ -181,7 +181,7 @@ class RiichiEnv:
     current_claims: dict[int, Any]
     dora_indicators: list[int]
     double_riichi_declared: list[bool]
-    forbidden_discards: list[int]
+    forbidden_discards: list[list[int]]
     game_type: Any
     ippatsu_cycle: list[bool]
     is_done: bool
@@ -193,7 +193,7 @@ class RiichiEnv:
     melds: list[list[Meld]]
     missed_agari_doujun: list[bool]
     missed_agari_riichi: list[bool]
-    mjai_mode: bool
+    skip_mjai_logging: bool  # If True, disables MJAI event logging for performance.
     nagashi_eligible: list[bool]
     needs_initialize_next_round: bool
     pending_is_draw: bool
@@ -214,7 +214,13 @@ class RiichiEnv:
     wall_digest: str
     pao: list[dict[int, int]]
 
-    def __init__(self, seed: int = 42, *args: Any, **kwargs: Any): ...
+    def __init__(
+        self,
+        game_type: int | str | None = None,
+        skip_mjai_logging: bool = False,  # If True, disables MJAI logging (required for visualizer).
+        seed: int | None = None,
+        round_wind: int | None = None,
+    ): ...
     def scores(self) -> list[int]: ...
     def points(self) -> list[int]: ...
     def ranks(self) -> list[int]: ...

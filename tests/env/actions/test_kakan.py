@@ -69,13 +69,13 @@ class TestKakan:
 
         k_action = kakan_actions[0]
         assert k_action.tile == 3, "Should be able to Kakan with tile 3 (1m)"
-        assert list(k_action.consume_tiles) == [0, 1, 2], "Should consume the 3 tiles in the Pon"
+        assert k_action.consume_tiles == [0, 1, 2], "Should consume the 3 tiles in the Pon"
 
         env.step({player_id: k_action})
         assert len(env.melds[player_id]) == 1
         new_meld = env.melds[player_id][0]
         assert new_meld.meld_type == MeldType.Addgang
-        assert sorted(list(new_meld.tiles)) == [0, 1, 2, 3]
+        assert sorted(new_meld.tiles) == [0, 1, 2, 3]
 
         # Hand check
         current_hand = env.hands[player_id]

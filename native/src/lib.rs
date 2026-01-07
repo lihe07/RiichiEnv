@@ -17,7 +17,7 @@ mod parser;
 mod replay;
 
 #[pyfunction]
-fn check_riichi_candidates(tiles_136: Vec<u8>) -> Vec<u8> {
+fn check_riichi_candidates(tiles_136: Vec<u8>) -> Vec<u32> {
     let mut candidates = Vec::new();
     // Convert to 34-tile hand
     let mut tiles_34 = Vec::with_capacity(tiles_136.len());
@@ -46,7 +46,7 @@ fn check_riichi_candidates(tiles_136: Vec<u8>) -> Vec<u8> {
         }
 
         if agari::is_tenpai(&mut hand) {
-            candidates.push(t_discard);
+            candidates.push(t_discard as u32);
         }
     }
     candidates

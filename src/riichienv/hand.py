@@ -421,3 +421,6 @@ class AgariCalculator:
 
     def is_tenpai(self) -> bool:
         return self.calc_rust.is_tenpai()
+
+    def get_waits(self) -> list[int]:
+        return self.calc_rust.get_waits()

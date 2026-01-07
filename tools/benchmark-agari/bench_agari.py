@@ -48,7 +48,7 @@ def to_mahjong_args(ctx):
         # Mahjong package's is_chi requires tiles to be sorted by 34-index.
         # Since riichienv tile IDs are basically 34_id * 4 (+ offset),
         # sorting by 136-id is equivalent to sorting by 34-id for this purpose.
-        m_tiles = sorted(list(m.tiles))
+        m_tiles = sorted(m.tiles)
 
         melds.append(MahjongMeld(m_type, m_tiles, opened=m.opened))
 

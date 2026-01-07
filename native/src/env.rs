@@ -64,7 +64,6 @@ pub struct Action {
     pub action_type: ActionType,
     #[pyo3(get, set)]
     pub tile: Option<u8>,
-    #[pyo3(get, set)]
     pub consume_tiles: Vec<u8>,
 }
 
@@ -134,6 +133,16 @@ impl Action {
     fn __str__(&self) -> String {
         self.__repr__()
     }
+
+    #[getter]
+    fn get_consume_tiles(&self) -> Vec<u32> {
+        self.consume_tiles.iter().map(|&x| x as u32).collect()
+    }
+
+    #[setter]
+    fn set_consume_tiles(&mut self, value: Vec<u8>) {
+        self.consume_tiles = value;
+    }
 }
 
 #[pyclass(module = "riichienv._riichienv")]
@@ -141,7 +150,6 @@ impl Action {
 pub struct Observation {
     #[pyo3(get)]
     pub player_id: u8,
-    #[pyo3(get)]
     pub hand: Vec<u8>,
     pub events_json: Vec<String>,
     #[pyo3(get)]
@@ -166,6 +174,11 @@ impl Observation {
             prev_events_size,
             legal_actions,
         }
+    }
+
+    #[getter]
+    pub fn hand(&self) -> Vec<u32> {
+        self.hand.iter().map(|&x| x as u32).collect()
     }
 
     #[getter]
@@ -257,7 +270,8 @@ impl Observation {
     pub fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Py<PyAny>> {
         let dict = PyDict::new(py);
         dict.set_item("player_id", self.player_id)?;
-        dict.set_item("hand", self.hand.clone())?;
+        let hand: Vec<u32> = self.hand.iter().map(|&x| x as u32).collect();
+        dict.set_item("hand", hand)?;
         dict.set_item("events", self.events(py)?)?;
         dict.set_item("prev_events_size", self.prev_events_size)?;
 
@@ -368,7 +382,6 @@ pub struct RiichiEnv {
     pub last_agari_results: HashMap<u8, Agari>,
     #[pyo3(get, set)]
     pub round_end_scores: Option<[i32; 4]>,
-    #[pyo3(get)]
     pub forbidden_discards: [Vec<u8>; 4],
 
     pub mjai_log: Vec<String>,
@@ -379,8 +392,10 @@ pub struct RiichiEnv {
     // Config
     #[pyo3(get)]
     pub game_type: u8,
+    // If true, disables the generation of MJAI-compatible event logs.
+    // Enabling this can improve performance for RL training where visualizer data is not needed.
     #[pyo3(get, set)]
-    pub mjai_mode: bool,
+    pub skip_mjai_logging: bool,
     #[pyo3(get)]
     pub seed: Option<u64>,
 }
@@ -669,9 +684,41 @@ fn _tid_to_mjai_hand(hand: &[u8]) -> Vec<String> {
 #[pymethods]
 impl RiichiEnv {
     #[new]
-    #[pyo3(signature = (game_type=4, mjai_mode=true, seed=None, round_wind=None))]
-    pub fn new(game_type: u8, mjai_mode: bool, seed: Option<u64>, round_wind: Option<u8>) -> Self {
-        RiichiEnv {
+    #[pyo3(signature = (game_type=None, skip_mjai_logging=false, seed=None, round_wind=None))]
+    pub fn new(
+        game_type: Option<Bound<'_, PyAny>>,
+        skip_mjai_logging: bool,
+        seed: Option<u64>,
+        round_wind: Option<u8>,
+    ) -> PyResult<Self> {
+        let gt = if let Some(val) = game_type {
+            if let Ok(s) = val.extract::<String>() {
+                match s.as_str() {
+                    "4p-red-single" => 0,
+                    "4p-red-east" => 1,
+                    "4p-red-half" => 2,
+                    "3p-red-single" => 3,
+                    "3p-red-east" => 4,
+                    "3p-red-half" => 5,
+                    _ => {
+                        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                            "Unsupported game_type: {}",
+                            s
+                        )))
+                    }
+                }
+            } else if let Ok(i) = val.extract::<u8>() {
+                i
+            } else {
+                return Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                    "game_type must be str or int",
+                ));
+            }
+        } else {
+            0 // Default to 4p-red-single
+        };
+
+        Ok(RiichiEnv {
             wall: Vec::new(),
             hands: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
             melds: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
@@ -717,11 +764,11 @@ impl RiichiEnv {
             player_event_counts: [0; 4],
             round_wind: round_wind.unwrap_or(0),
             ippatsu_cycle: [false; 4],
-            game_type,
-            mjai_mode,
+            game_type: gt,
+            skip_mjai_logging,
             seed,
             forbidden_discards: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
-        }
+        })
     }
 
     #[getter]
@@ -788,6 +835,28 @@ impl RiichiEnv {
         self.dora_indicators = dora_indicators.iter().map(|&x| x as u8).collect();
     }
 
+    #[getter]
+    fn get_forbidden_discards(&self) -> [Vec<u32>; 4] {
+        [
+            self.forbidden_discards[0]
+                .iter()
+                .map(|&x| x as u32)
+                .collect(),
+            self.forbidden_discards[1]
+                .iter()
+                .map(|&x| x as u32)
+                .collect(),
+            self.forbidden_discards[2]
+                .iter()
+                .map(|&x| x as u32)
+                .collect(),
+            self.forbidden_discards[3]
+                .iter()
+                .map(|&x| x as u32)
+                .collect(),
+        ]
+    }
+
     #[pyo3(signature = (oya=None, wall=None, bakaze=None, scores=None, honba=None, kyotaku=None, seed=None))]
     #[allow(clippy::too_many_arguments)]
     pub fn reset<'py>(
@@ -814,7 +883,7 @@ impl RiichiEnv {
             [25000; 4]
         };
 
-        if self.mjai_log.is_empty() && self.mjai_mode {
+        if self.mjai_log.is_empty() && !self.skip_mjai_logging {
             let mut start_game = serde_json::Map::new();
             start_game.insert("type".to_string(), Value::String("start_game".to_string()));
             start_game.insert("id".to_string(), Value::Number(0.into()));
@@ -1141,7 +1210,7 @@ impl RiichiEnv {
                 self.missed_agari_doujun[self.current_player as usize] = false;
                 self.active_players = vec![self.current_player];
 
-                if self.mjai_mode || !self.riichi_declared[self.current_player as usize] {
+                if !self.skip_mjai_logging || !self.riichi_declared[self.current_player as usize] {
                     return self.get_obs_py(py, Some(self.active_players.clone()));
                 }
                 continue;
@@ -1193,7 +1262,7 @@ impl RiichiEnv {
                             self.melds[winner as usize].clone(),
                         );
                         let ura = if self.riichi_declared[winner as usize] {
-                            self._get_ura_markers_u8()
+                            self._get_ura_markers_raw()
                         } else {
                             vec![]
                         };
@@ -1266,7 +1335,7 @@ impl RiichiEnv {
                                     melds.clone(),
                                 );
                                 if calc
-                                    .get_waits()
+                                    .get_waits_u8()
                                     .iter()
                                     .any(|&w| self.discards[i as usize].iter().any(|&d| d / 4 == w))
                                 {
@@ -1341,7 +1410,7 @@ impl RiichiEnv {
                             self._reveal_kan_dora();
                             self._check_midway_draws();
 
-                            if self.mjai_mode {
+                            if !self.skip_mjai_logging {
                                 // return self.get_obs_py(py, Some(vec![pid]));
                             }
                             continue;
@@ -1388,7 +1457,7 @@ impl RiichiEnv {
 
                                 // Furiten Check
                                 if calc
-                                    .get_waits()
+                                    .get_waits_u8()
                                     .iter()
                                     .any(|&w| self.discards[i as usize].iter().any(|&d| d / 4 == w))
                                 {
@@ -1484,7 +1553,7 @@ impl RiichiEnv {
                             self._reveal_kan_dora();
                             self._check_midway_draws();
 
-                            if self.mjai_mode {
+                            if !self.skip_mjai_logging {
                                 // return self.get_obs_py(py, Some(vec![pid]));
                             }
                             continue;
@@ -1585,7 +1654,7 @@ impl RiichiEnv {
                             self.melds[winner as usize].clone(),
                         );
                         let ura = if self.riichi_declared[winner as usize] {
-                            self._get_ura_markers_u8()
+                            self._get_ura_markers_raw()
                         } else {
                             vec![]
                         };
@@ -1652,7 +1721,7 @@ impl RiichiEnv {
                             self.pending_kan = None;
                             self._reveal_kan_dora();
                             self._check_midway_draws();
-                            if self.mjai_mode {
+                            if !self.skip_mjai_logging {
                                 return self.get_obs_py(py, Some(vec![]));
                             }
                             continue; // Proceed to draw
@@ -1695,7 +1764,7 @@ impl RiichiEnv {
                                     vec![Action::new(ActionType::Ron, Some(tile), vec![])],
                                 );
                             }
-                            if self.mjai_mode {
+                            if !self.skip_mjai_logging {
                                 // return self.get_obs_py(py, Some(self.active_players.clone()));
                             }
                         } else {
@@ -1720,7 +1789,7 @@ impl RiichiEnv {
                         self.active_players = vec![claimer];
                     }
 
-                    if self.mjai_mode {
+                    if !self.skip_mjai_logging {
                         // return self.get_obs_py(py, Some(self.active_players.clone()));
                     }
                     continue;
@@ -1812,7 +1881,7 @@ impl RiichiEnv {
 
                             self.current_player = pid; // Remain current player
                             self.phase = Phase::WaitAct;
-                            if self.mjai_mode {
+                            if !self.skip_mjai_logging {
                                 // return self.get_obs_py(py, Some(vec![pid]));
                             }
                             continue;
@@ -1869,7 +1938,7 @@ impl RiichiEnv {
                             self.current_player = pid;
                             self.phase = Phase::WaitAct;
 
-                            if self.mjai_mode {
+                            if !self.skip_mjai_logging {
                                 // return self.get_obs_py(py, Some(vec![pid]));
                             }
                             continue;
@@ -1938,7 +2007,7 @@ impl RiichiEnv {
         uras
     }
 
-    pub fn _get_ura_markers_u8(&self) -> Vec<u8> {
+    pub fn _get_ura_markers_raw(&self) -> Vec<u8> {
         let mut uras = Vec::new();
         for i in 0..self.dora_indicators.len() {
             let target_idx = (5 + 2 * i) as isize - self.rinshan_draw_count as isize;
@@ -1947,6 +2016,13 @@ impl RiichiEnv {
             }
         }
         uras
+    }
+
+    pub fn _get_ura_markers_u8(&self) -> Vec<u32> {
+        self._get_ura_markers_raw()
+            .iter()
+            .map(|&x| x as u32)
+            .collect()
     }
 }
 
@@ -2053,7 +2129,7 @@ impl RiichiEnv {
             let hand = &self.hands[pid as usize];
             let melds = &self.melds[pid as usize];
             let calc = crate::agari_calculator::AgariCalculator::new(hand.clone(), melds.clone());
-            let waits = calc.get_waits();
+            let waits = calc.get_waits_u8();
             if waits.is_empty() {
                 continue; // Not Tenpai -> Cannot Ron logic
             }
@@ -2562,7 +2638,7 @@ impl RiichiEnv {
     }
 
     fn _push_mjai_event(&mut self, ev: Value) {
-        if !self.mjai_mode {
+        if self.skip_mjai_logging {
             return;
         }
         let s = ev.to_string();
@@ -2745,7 +2821,7 @@ impl RiichiEnv {
                         }
                         let mut old_waits =
                             AgariCalculator::new(hand13, self.melds[pid as usize].clone())
-                                .get_waits();
+                                .get_waits_u8();
                         old_waits.sort();
 
                         // Simulate ankan
@@ -2757,7 +2833,8 @@ impl RiichiEnv {
                                 next_hand.remove(pos);
                             }
                         }
-                        let mut new_waits = AgariCalculator::new(next_hand, next_melds).get_waits();
+                        let mut new_waits =
+                            AgariCalculator::new(next_hand, next_melds).get_waits_u8();
                         new_waits.sort();
 
                         if !old_waits.is_empty() && old_waits == new_waits {
@@ -2913,7 +2990,7 @@ impl RiichiEnv {
     }
 
     fn _execute_claim(&mut self, pid: u8, action: Action, from_pid: Option<u8>) -> PyResult<()> {
-        // if self.mjai_mode {
+        // if !self.skip_mjai_logging {
         //     println!(
         //         "DEBUG RUST: _execute_claim START pid={} action={:?} current_melds_len={}",
         //         pid,

@@ -105,7 +105,6 @@ impl Wind {
 pub struct Meld {
     #[pyo3(get, set)]
     pub meld_type: MeldType,
-    #[pyo3(get, set)]
     pub tiles: Vec<u8>,
     #[pyo3(get, set)]
     pub opened: bool,
@@ -120,6 +119,16 @@ impl Meld {
             tiles,
             opened,
         }
+    }
+
+    #[getter]
+    pub fn tiles(&self) -> Vec<u32> {
+        self.tiles.iter().map(|&t| t as u32).collect()
+    }
+
+    #[setter]
+    pub fn set_tiles(&mut self, tiles: Vec<u8>) {
+        self.tiles = tiles;
     }
 }
 

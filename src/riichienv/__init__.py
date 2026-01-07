@@ -11,6 +11,7 @@ from ._riichienv import (  # type: ignore
     Score,
     Wind,
     calculate_score,
+    check_riichi_candidates,
     parse_hand,
     parse_tile,
 )
@@ -35,6 +36,7 @@ __all__ = [
     "Score",
     "Wind",
     "calculate_score",
+    "check_riichi_candidates",
     "parse_hand",
     "parse_tile",
     "Action",

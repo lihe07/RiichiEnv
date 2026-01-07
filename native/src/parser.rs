@@ -84,8 +84,7 @@ impl TileManager {
 }
 
 // Parses string like "123m456p..." or "(...)"
-#[pyfunction]
-pub fn parse_hand(text: &str) -> PyResult<(Vec<u8>, Vec<Meld>)> {
+pub fn parse_hand_internal(text: &str) -> PyResult<(Vec<u8>, Vec<Meld>)> {
     let mut tm = TileManager::new();
     let mut tiles_136 = Vec::new();
     let mut melds = Vec::new();
@@ -141,6 +140,13 @@ pub fn parse_hand(text: &str) -> PyResult<(Vec<u8>, Vec<Meld>)> {
     Ok((tiles_136, melds))
 }
 
+// Parses string like "123m456p..." or "(...)"
+#[pyfunction]
+pub fn parse_hand(text: &str) -> PyResult<(Vec<u32>, Vec<Meld>)> {
+    let (tiles, melds) = parse_hand_internal(text)?;
+    Ok((tiles.iter().map(|&x| x as u32).collect(), melds))
+}
+
 /// Parse a single tile string into a 136-format tile ID.
 ///
 /// The function accepts tile notation in the format: `{rank}{suit}` where:
@@ -187,7 +193,7 @@ pub fn parse_hand(text: &str) -> PyResult<(Vec<u8>, Vec<Meld>)> {
 /// - The input has invalid tile notation
 #[pyfunction]
 pub fn parse_tile(text: &str) -> PyResult<u8> {
-    let (tiles, melds) = parse_hand(text)?;
+    let (tiles, melds) = parse_hand_internal(text)?;
     if !melds.is_empty() {
         return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
             "parse_tile expects a single tile, but found meld syntax in input",

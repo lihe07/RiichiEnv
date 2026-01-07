@@ -7,11 +7,12 @@
 [![CI](https://github.com/smly/RiichiEnv/actions/workflows/ci.yml/badge.svg)](https://github.com/smly/RiichiEnv/actions/workflows/ci.yml)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/smly/RiichiEnv/demos/replay_demo.ipynb)
 [![Kaggle](https://kaggle.com/static/images/open-in-kaggle.svg)](https://kaggle.com/kernels/welcome?src=https://github.com/smly/RiichiEnv/demos/replay_demo.ipynb)
+![PyPI - Version](https://img.shields.io/pypi/v/riichienv)
 ![License](https://img.shields.io/github/license/smly/riichienv)
 
 </div>
 
-# RiichiEnv
+-----
 
 **High-Performance Research Environment for Riichi Mahjong**
 
@@ -26,15 +27,7 @@
 * **Rule Flexibility**: Support for diverse rule sets, including no-red-dragon variants and three-player mahjong.
 * **Game Visualization**: Integrated replay viewer for Jupyter Notebooks.
 
-## 📊 Performance
-
-- [ ] TODO: Add performance benchmarks compared to other packages (`mahjong`, `mjx`, `mahjax`, `mortal`).
-
 ## 📦 Installation
-
-Currently, building from source requires the **Rust** toolchain.
-
-- [ ] TODO: Automated binary wheel distribution on PyPI.
 
 ```bash
 uv add riichienv
@@ -42,11 +35,14 @@ uv add riichienv
 pip install riichienv
 ```
 
-## 🚀 Usage
+Currently, building from source requires the **Rust** toolchain.
 
-- [ ] TODO: Support four-player half-round (hanchan) without red dragons.
-- [ ] TODO: Complete three-player rule sets.
-- [ ] TODO: Provide reference reinforcement learning examples.
+```bash
+uv sync --dev
+uv run maturin develop --release
+```
+
+## 🚀 Usage
 
 ### Gym-style API
 
@@ -120,12 +116,14 @@ Switch between different rule sets using the `game_type` keyword argument in the
 
 | Rule Set | Players | Duration | Red Dragons | Status |
 |----------|---------|----------|-------------|--------|
-| `4p-red-single` | 4 | 1 Round | Enabled | ✅ Ready (Default) |
-| `4p-red-half` | 4 | Half-round | Enabled | ✅ Ready |
-| `4p-red-east` | 4 | East-only | Enabled | ✅ Ready |
-| `3p-red-single` | 3 | 1 Round | Enabled | 🚧 In progress |
-| `3p-red-half` | 3 | Half-round | Enabled | 🚧 In progress |
-| `3p-red-east` | 3 | East-only | Enabled | 🚧 In progress |
+| `4p-red-single` | 4 | Single | Enabled | ✅ Ready (Default) |
+| `4p-red-half` | 4 | Hanchan | Enabled | ✅ Ready |
+| `4p-red-east` | 4 | East | Enabled | ✅ Ready |
+| `3p-red-single` | 3 | Single | Enabled | 🚧 In progress |
+| `3p-red-half` | 3 | Hanchan | Enabled | 🚧 In progress |
+| `3p-red-east` | 3 | East | Enabled | 🚧 In progress |
+
+Single round modes like `4p-red-single` do not feature sudden death, and allow you to specify the score situation, wind direction, number of deposit sticks, and other settings.
 
 Example of initializing a four-player half-round game with red dragons:
 
@@ -147,7 +145,7 @@ print(scores, points, ranks)
 
 ### Compatibility with Mortal
 
-RiichiEnv is fully compatible with the Mortal MJAI bot processing flow. You can easily benchmark your models against Mortal using the MJAI event stream.
+RiichiEnv is fully compatible with the Mortal MJAI bot processing flow. I have confirmed that MortalAgent can execute matches without errors in over 1,000,000+ hanchan games on RiichiEnv.
 
 ```python
 from riichienv import RiichiEnv, Action
@@ -168,7 +166,7 @@ class MortalAgent:
         assert action is not None, "Mortal must return a legal action"
         return action
 
-env = RiichiEnv(game_type="4p-red-half", mjai_mode=True)
+env = RiichiEnv(game_type="4p-red-half")
 agents = {pid: MortalAgent(pid) for pid in range(4)}
 obs_dict = env.reset()
 while not env.done():
@@ -180,10 +178,15 @@ print(env.scores(), env.points(), env.ranks())
 
 ### Agari Calculation
 
-Calculate hands and scores using an interface compatible with the popular `mahjong` package.
-
 ```python
-# TBD
+>>> from riichienv import AgariCalculator
+>>> import riichienv.convert as cvt
+
+>>> ac = AgariCalculator.hand_from_text("111m33p12s111666z")
+>>> ac.is_tenpai()
+True
+>>> ac.calc(cvt.mpsz_to_tid("3s"))
+Agari(agari=True, yakuman=False, ron_agari=12000, tsumo_agari_oya=0, tsumo_agari_ko=0, yaku=[8, 11, 10, 22], han=5, fu=60)
 ```
 
 ### Tile Conversion & Hand Parsing
@@ -197,24 +200,25 @@ Standardize between various tile formats (136-tile, MPSZ, MJAI) and easily parse
 
 >>> from riichienv import parse_hand
 >>> parse_hand("123m406m789m777z")
+([0, 4, 8, 12, 16, 20, 24, 28, 32, 132, 133, 134], [])
+
 ```
 
-See [DATA_REPRESENTATION.md](DATA_REPRESENTATION.md) for more details.
-
-## Rust API
-
-> [!WARNING]
-> The Rust API is currently under construction and may be unstable.
-
-- [ ] TODO: Publish crates to crates.io.
-
-```rust
-cargo add riichienv
-```
+See [DATA_REPRESENTATION.md](docs/DATA_REPRESENTATION.md) for more details.
 
 ## 🛠 Development
 
-For more architectural details and contribution guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md) and [DEVELOPMENT.md](DEVELOPMENT.md).
+For more architectural details and contribution guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md) and [DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md).
+
+## Further Development Plan
+
+- [ ] Add performance benchmarks compared to other packages.
+- [ ] Add support for more game rules.
+- [ ] Add example codes for training agents.
+- [ ] Add high-level mahjong domain API for training agents.
+- [ ] Optimize training performance (e.g., `skip_mjai_logging`, `batch_act`, etc.).
+- [ ] Add interface for batch training.
+- [ ] Add arena mode for evaluating agents.
 
 ## 📄 License
 
