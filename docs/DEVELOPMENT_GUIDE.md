@@ -158,21 +158,22 @@ This project uses an automated GitHub Actions workflow for releases.
 To publish a new version:
 
 1. Update the version number in `pyproject.toml` (e.g., `0.1.0` -> `0.1.1`).
-2. Update the version in `Cargo.toml` (under `[package]` in `native/Cargo.toml`) if necessary, though `maturin` often handles the mismatch or you should keep them in sync.
-3. Commit the changes:
+2. Commit and push the changes:
    ```bash
-   git add pyproject.toml native/Cargo.toml
+   git add pyproject.toml
    git commit -m "chore: bump version to 0.1.1"
    git push
    ```
-4. Create and push a tag starting with `v`:
-   ```bash
-   git tag v0.1.1
-   git push origin v0.1.1
-   ```
+3. **Draft a Release on GitHub**:
+   - Go to the **Releases** page on GitHub.
+   - Click **Draft a new release**.
+   - **Choose a tag**: Create a new tag (e.g., `v0.1.1`) on the target branch.
+   - **Release title**: `v0.1.1` (or your preferred title).
+   - Write your release notes.
+   - Click **Publish release**.
 
 The GitHub Actions workflow will automatically:
+- Trigger when the release is published.
 - Build wheels for Linux, Windows, and macOS.
-- Create a GitHub Release with the changelog.
-- Upload the binary artifacts to the GitHub Release.
+- **Upload the binary artifacts** to your existing release.
 - Publish the package to PyPI.
