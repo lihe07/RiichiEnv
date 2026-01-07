@@ -206,18 +206,18 @@ Standardize between various tile formats (136-tile, MPSZ, MJAI) and easily parse
 
 See [DATA_REPRESENTATION.md](DATA_REPRESENTATION.md) for more details.
 
-## Rust API
-
-> [!WARNING]
-> The Rust API is currently under construction and may be unstable.
-
-## 📊 Performance
-
-- [ ] TODO: Add performance benchmarks compared to other packages (`mahjong`, `mjx`, `mahjax`, `mortal`).
-
 ## 🛠 Development
 
 For more architectural details and contribution guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md) and [DEVELOPMENT.md](DEVELOPMENT.md).
+
+## Further Development Plan
+
+- [ ] Add performance benchmarks compared to other packages.
+- [ ] Add support for more game rules.
+- [ ] Add example codes for training agents.
+- [ ] Add high-level mahjong domain API for training agents.
+- [ ] Add interface for batch training.
+- [ ] Add arena mode for evaluating agents.
 
 ## 📄 License
 

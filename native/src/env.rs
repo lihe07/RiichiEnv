@@ -682,9 +682,41 @@ fn _tid_to_mjai_hand(hand: &[u8]) -> Vec<String> {
 #[pymethods]
 impl RiichiEnv {
     #[new]
-    #[pyo3(signature = (game_type=4, mjai_mode=true, seed=None, round_wind=None))]
-    pub fn new(game_type: u8, mjai_mode: bool, seed: Option<u64>, round_wind: Option<u8>) -> Self {
-        RiichiEnv {
+    #[pyo3(signature = (game_type=None, mjai_mode=true, seed=None, round_wind=None))]
+    pub fn new(
+        game_type: Option<Bound<'_, PyAny>>,
+        mjai_mode: bool,
+        seed: Option<u64>,
+        round_wind: Option<u8>,
+    ) -> PyResult<Self> {
+        let gt = if let Some(val) = game_type {
+            if let Ok(s) = val.extract::<String>() {
+                match s.as_str() {
+                    "4p-red-single" => 0,
+                    "4p-red-east" => 1,
+                    "4p-red-half" => 2,
+                    "3p-red-single" => 3,
+                    "3p-red-east" => 4,
+                    "3p-red-half" => 5,
+                    _ => {
+                        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                            "Unsupported game_type: {}",
+                            s
+                        )))
+                    }
+                }
+            } else if let Ok(i) = val.extract::<u8>() {
+                i
+            } else {
+                return Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                    "game_type must be str or int",
+                ));
+            }
+        } else {
+            0 // Default to 4p-red-single
+        };
+
+        Ok(RiichiEnv {
             wall: Vec::new(),
             hands: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
             melds: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
@@ -730,11 +762,11 @@ impl RiichiEnv {
             player_event_counts: [0; 4],
             round_wind: round_wind.unwrap_or(0),
             ippatsu_cycle: [false; 4],
-            game_type,
+            game_type: gt,
             mjai_mode,
             seed,
             forbidden_discards: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
-        }
+        })
     }
 
     #[getter]
