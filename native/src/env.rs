@@ -1228,7 +1228,7 @@ impl RiichiEnv {
                             self.melds[winner as usize].clone(),
                         );
                         let ura = if self.riichi_declared[winner as usize] {
-                            self._get_ura_markers_u8()
+                            self._get_ura_markers_raw()
                         } else {
                             vec![]
                         };
@@ -1301,7 +1301,7 @@ impl RiichiEnv {
                                     melds.clone(),
                                 );
                                 if calc
-                                    .get_waits()
+                                    .get_waits_u8()
                                     .iter()
                                     .any(|&w| self.discards[i as usize].iter().any(|&d| d / 4 == w))
                                 {
@@ -1423,7 +1423,7 @@ impl RiichiEnv {
 
                                 // Furiten Check
                                 if calc
-                                    .get_waits()
+                                    .get_waits_u8()
                                     .iter()
                                     .any(|&w| self.discards[i as usize].iter().any(|&d| d / 4 == w))
                                 {
@@ -1620,7 +1620,7 @@ impl RiichiEnv {
                             self.melds[winner as usize].clone(),
                         );
                         let ura = if self.riichi_declared[winner as usize] {
-                            self._get_ura_markers_u8()
+                            self._get_ura_markers_raw()
                         } else {
                             vec![]
                         };
@@ -1973,7 +1973,7 @@ impl RiichiEnv {
         uras
     }
 
-    pub fn _get_ura_markers_u8(&self) -> Vec<u8> {
+    pub fn _get_ura_markers_raw(&self) -> Vec<u8> {
         let mut uras = Vec::new();
         for i in 0..self.dora_indicators.len() {
             let target_idx = (5 + 2 * i) as isize - self.rinshan_draw_count as isize;
@@ -1982,6 +1982,13 @@ impl RiichiEnv {
             }
         }
         uras
+    }
+
+    pub fn _get_ura_markers_u8(&self) -> Vec<u32> {
+        self._get_ura_markers_raw()
+            .iter()
+            .map(|&x| x as u32)
+            .collect()
     }
 }
 
@@ -2088,7 +2095,7 @@ impl RiichiEnv {
             let hand = &self.hands[pid as usize];
             let melds = &self.melds[pid as usize];
             let calc = crate::agari_calculator::AgariCalculator::new(hand.clone(), melds.clone());
-            let waits = calc.get_waits();
+            let waits = calc.get_waits_u8();
             if waits.is_empty() {
                 continue; // Not Tenpai -> Cannot Ron logic
             }
@@ -2780,7 +2787,7 @@ impl RiichiEnv {
                         }
                         let mut old_waits =
                             AgariCalculator::new(hand13, self.melds[pid as usize].clone())
-                                .get_waits();
+                                .get_waits_u8();
                         old_waits.sort();
 
                         // Simulate ankan
@@ -2792,7 +2799,8 @@ impl RiichiEnv {
                                 next_hand.remove(pos);
                             }
                         }
-                        let mut new_waits = AgariCalculator::new(next_hand, next_melds).get_waits();
+                        let mut new_waits =
+                            AgariCalculator::new(next_hand, next_melds).get_waits_u8();
                         new_waits.sort();
 
                         if !old_waits.is_empty() && old_waits == new_waits {

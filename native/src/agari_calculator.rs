@@ -17,7 +17,7 @@ pub struct AgariCalculator {
 impl AgariCalculator {
     #[staticmethod]
     pub fn hand_from_text(text: &str) -> PyResult<Self> {
-        let (tiles, melds) = crate::parser::parse_hand(text)?;
+        let (tiles, melds) = crate::parser::parse_hand_internal(text)?;
         Ok(Self::new(tiles, melds))
     }
     #[new]
@@ -191,7 +191,7 @@ impl AgariCalculator {
         false
     }
 
-    pub fn get_waits(&self) -> Vec<u8> {
+    pub fn get_waits_u8(&self) -> Vec<u8> {
         let mut waits = Vec::new();
         let current_total: u8 = self.hand.counts.iter().sum::<u8>() + (self.melds.len() as u8 * 3);
         if current_total != 13 {
@@ -208,6 +208,10 @@ impl AgariCalculator {
             }
         }
         waits
+    }
+
+    pub fn get_waits(&self) -> Vec<u32> {
+        self.get_waits_u8().iter().map(|&x| x as u32).collect()
     }
 }
 

@@ -178,10 +178,15 @@ print(env.scores(), env.points(), env.ranks())
 
 ### Agari Calculation
 
-Calculate hands and scores using an interface compatible with the popular `mahjong` package.
-
 ```python
-# TBD
+>>> from riichienv import AgariCalculator
+>>> import riichienv.convert as cvt
+
+>>> ac = AgariCalculator.hand_from_text("111m33p12s111666z")
+>>> ac.is_tenpai()
+True
+>>> ac.calc(cvt.mpsz_to_tid("3s"))
+Agari(agari=True, yakuman=False, ron_agari=12000, tsumo_agari_oya=0, tsumo_agari_ko=0, yaku=[8, 11, 10, 22], han=5, fu=60)
 ```
 
 ### Tile Conversion & Hand Parsing
@@ -195,6 +200,8 @@ Standardize between various tile formats (136-tile, MPSZ, MJAI) and easily parse
 
 >>> from riichienv import parse_hand
 >>> parse_hand("123m406m789m777z")
+([0, 4, 8, 12, 16, 20, 24, 28, 32, 132, 133, 134], [])
+
 ```
 
 See [DATA_REPRESENTATION.md](DATA_REPRESENTATION.md) for more details.
