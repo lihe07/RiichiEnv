@@ -155,20 +155,40 @@ export class Renderer {
                 }
 
                 .debug-panel {
-                    background: #222;
+                    position: absolute;
+                    top: 10px;
+                    left: 10px;
+                    background: rgba(0, 0, 0, 0.7);
                     color: #0f0;
                     font-family: monospace;
                     padding: 10px;
                     border-radius: 4px;
                     font-size: 11px;
-                    width: 100%;
-                    min-height: 100px;
-                    max-height: 250px;
-                    overflow: auto;
-                    margin-top: 10px;
+                    width: 300px;
+                    max-height: 200px;
+                    overflow-y: scroll;
                     white-space: pre-wrap;
                     box-sizing: border-box;
                     border: 1px solid #444;
+                    z-index: 500;
+                    display: none; /* Hidden by default, toggled by JS */
+                }
+
+                .log-toggle-btn {
+                    position: absolute;
+                    bottom: 10px;
+                    right: 10px;
+                    background: rgba(255, 255, 255, 0.8);
+                    border: 1px solid #999;
+                    border-radius: 4px;
+                    padding: 5px 10px;
+                    cursor: pointer;
+                    font-weight: bold;
+                    z-index: 501;
+                    user-select: none;
+                }
+                .log-toggle-btn:hover {
+                    background: #fff;
                 }
 
                 @keyframes popIn {
@@ -176,10 +196,93 @@ export class Renderer {
                     to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
                 }
                 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+                .player-info-box {
+                    width: 100px;
+                    background: rgba(0, 0, 0, 0.5);
+                    opacity: 0.5;
+                    transition: opacity 0.2s, background-color 0.2s;
+                    color: white;
+                    padding: 8px;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    margin-left: 10px;
+                    user-select: none;
+                }
+                .player-info-box:hover {
+                    opacity: 1.0;
+                    background: rgba(0, 0, 0, 0.7);
+                }
+                .active-viewpoint {
+                    border: 1px solid #ffd700;
+                }
+                .center-info {
+                    cursor: pointer;
+                    transition: transform 0.2s, background-color 0.2s;
+                }
+                .center-info:hover {
+                    transform: translate(-50%, -50%) scale(1.05) !important;
+                    background-color: #2a4d25 !important;
+                }
+                .modal-overlay {
+                    position: absolute;
+                    top: 0; left: 0;
+                    width: 100%;
+                    height: 100%;
+                    box-sizing: border-box;
+                    background: rgba(0,0,0,0.6);
+                    z-index: 9999;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    transform: none !important; /* Force reset to avoid inheritance issues */
+                }
+                .modal-content {
+                    background: #0d1f0d;
+                    color: #fff;
+                    padding: 20px;
+                    border-radius: 8px;
+                    max-width: 90%;
+                    max-height: 80%;
+                    overflow-y: auto;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.8);
+                    border: 1px solid #2a4d25;
+                }
+                .kyoku-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    font-size: 14px;
+                }
+                .kyoku-table th, .kyoku-table td {
+                    border: 1px solid #2a4d25;
+                    padding: 8px;
+                    text-align: center;
+                }
+                .kyoku-table th {
+                    background-color: #1a3317;
+                    position: sticky;
+                    top: 0;
+                }
+                .kyoku-row:hover {
+                    background-color: #2a4d25;
+                    cursor: pointer;
+                }
             `;
             document.head.appendChild(style);
         }
         this.styleElement = style;
+    }
+
+    onViewpointChange: ((pIdx: number) => void) | null = null;
+    onCenterClick: (() => void) | null = null;
+    private readonly BASE_SIZE = 800;
+
+    resize(width: number) {
+        if (!this.boardElement) return;
+        const scale = width / this.BASE_SIZE;
+        this.boardElement.style.transform = `translate(-50%, -50%) scale(${scale})`;
     }
 
     getTileHtml(tileStr: string): string {
@@ -207,6 +310,15 @@ export class Renderer {
         if (!this.boardElement) {
             this.boardElement = document.createElement('div');
             this.boardElement.className = 'mahjong-board';
+            Object.assign(this.boardElement.style, {
+                width: `${this.BASE_SIZE}px`,
+                height: `${this.BASE_SIZE}px`,
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)', // Initial transform, will be overridden by resize
+                transformOrigin: 'center center'
+            });
             this.container.appendChild(this.boardElement);
         }
         const board = this.boardElement;
@@ -231,6 +343,11 @@ export class Renderer {
             boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
             minWidth: '120px'
         });
+
+        center.onclick = (e) => {
+            e.stopPropagation();
+            if (this.onCenterClick) this.onCenterClick();
+        };
 
         center.innerHTML = `
             <div style="font-size: 1.2em; font-weight: bold; margin-bottom: 5px;">
@@ -279,6 +396,7 @@ export class Renderer {
                 position: 'relative'
             });
 
+            // Active player highlighting (border/bg)
             if (i === state.currentActor) {
                 pDiv.classList.add('active-player-highlight');
                 pDiv.style.padding = '10px';
@@ -322,35 +440,14 @@ export class Renderer {
                 pDiv.appendChild(wDiv);
             }
 
-            // Info Layer
-            const infoDiv = document.createElement('div');
-            const winds = ['E', 'S', 'W', 'N'];
-            const windLabel = winds[p.wind];
-            const isOya = (p.wind === 0);
-
-            let label = `P${i}`;
-            infoDiv.innerHTML = `
-                <span style="font-weight:bold; font-size:1.1em; margin-right:8px; color: ${isOya ? '#ff4d4d' : 'white'};">
-                    ${windLabel}
-                </span>
-                <span style="font-weight:bold; font-size:1.1em; margin-right:8px;">${label}</span>
-                <span style="font-family:monospace; font-size:1.3em;">${p.score}</span>
-            `;
-
-            if (p.riichi) {
-                infoDiv.style.color = '#ff6b6b';
-                infoDiv.innerHTML += ' <span style="font-weight:bold; border:2px solid currentColor; padding:0 4px; border-radius:4px; font-size:0.9em; margin-left:8px;">REACH</span>';
-            }
-            infoDiv.style.marginBottom = '8px';
-            infoDiv.style.textShadow = '1px 1px 2px #000';
-
-            // Riichi Stick
-            if (p.riichi) {
-                const stick = document.createElement('div');
-                stick.className = 'riichi-stick';
-                stick.style.marginBottom = '10px';
-                pDiv.appendChild(stick);
-            }
+            // --- River + Info Container ---
+            const riverRow = document.createElement('div');
+            Object.assign(riverRow.style, {
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'center',
+                marginBottom: '8px'
+            });
 
             // River
             const riverDiv = document.createElement('div');
@@ -373,6 +470,56 @@ export class Renderer {
                 if (d.isTsumogiri) cell.style.filter = 'brightness(0.7)';
                 riverDiv.appendChild(cell);
             });
+            riverRow.appendChild(riverDiv);
+
+            // Info Box (New Overlay)
+            const infoBox = document.createElement('div');
+            infoBox.className = 'player-info-box';
+            if (i === this.viewpoint) {
+                infoBox.classList.add('active-viewpoint');
+            }
+            // Rotate info box counter to player rotation so it stays upright?
+            // The image shows it upright. Since the whole `pDiv` is rotated, the info box is also rotated.
+            // If we want it upright relative to screen, we need `transform: rotate(-Xdeg)`.
+            // But usually in these viewers, the river is rotated, so the text is also rotated (readable from that seat).
+            // The user image shows "East 1 局" in middle is upright, but players are not.
+            // Oh, the user image is 2D top down?
+            // Actually the image attached shows the info box ("NoName") at bottom right for self.
+            // For others, it's rotated.
+            // So default behavior (rotated with pDiv) is expected.
+
+            const winds = ['E', 'S', 'W', 'N'];
+            const windLabel = winds[p.wind];
+            const isOya = (p.wind === 0);
+
+            infoBox.innerHTML = `
+                <div style="font-size: 1.2em; font-weight: bold; margin-bottom: 4px; color: ${isOya ? '#ff4d4d' : 'white'};">
+                    ${windLabel} P${i}
+                </div>
+                <div style="font-family:monospace; font-size:1.1em;">${p.score}</div>
+            `;
+            if (p.riichi) {
+                infoBox.innerHTML += '<div style="color:#ff6b6b; font-weight:bold; font-size:0.9em; margin-top:2px;">REACH</div>';
+            }
+
+            infoBox.onclick = (e) => {
+                e.stopPropagation(); // Prevent bubbling
+                if (this.onViewpointChange) {
+                    this.onViewpointChange(i);
+                }
+            };
+
+            riverRow.appendChild(infoBox);
+
+            pDiv.appendChild(riverRow);
+
+            // Riichi Stick (placed below river/info, above hand)
+            if (p.riichi) {
+                const stick = document.createElement('div');
+                stick.className = 'riichi-stick';
+                stick.style.marginBottom = '10px';
+                pDiv.appendChild(stick);
+            }
 
             // Hand & Melds Area
             const handArea = document.createElement('div');
@@ -431,8 +578,6 @@ export class Renderer {
             }
             handArea.appendChild(meldsDiv);
 
-            pDiv.appendChild(infoDiv);
-            pDiv.appendChild(riverDiv);
             pDiv.appendChild(handArea);
             wrapper.appendChild(pDiv);
             board.appendChild(wrapper);

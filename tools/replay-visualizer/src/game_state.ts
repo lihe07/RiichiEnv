@@ -5,15 +5,42 @@ const sortHand = (hand: string[]) => {
     const order = (t: string) => {
         if (t === 'back') return 9999;
 
-        const suit = t.slice(-1);
-        let num = parseInt(t[0]);
-        if (t.endsWith('r') || t.startsWith('0')) num = 5;
+        let suit = '';
+        let num = 0;
+        let isRed = false;
+
+        // Handle Honors (z)
+        const honorMap: { [key: string]: number } = {
+            'E': 1, 'S': 2, 'W': 3, 'N': 4, // Winds
+            'P': 5, 'F': 6, 'C': 7          // Dragons (Haku/White, Hatsu/Green, Chun/Red)
+        };
+
+        if (honorMap[t]) {
+            suit = 'z';
+            num = honorMap[t];
+        } else {
+            // Handle Suited Tiles
+            // Formats: "1m", "5mr", "0m" (if used)
+            if (t.endsWith('r')) {
+                isRed = true;
+                suit = t.charAt(t.length - 2); // 5mr -> m
+                num = parseInt(t.charAt(0));
+            } else {
+                suit = t.charAt(t.length - 1); // 1m -> m
+                num = parseInt(t.charAt(0));
+            }
+
+            // Handle "0m" case if present in data (treat as Red 5)
+            if (num === 0) {
+                num = 5;
+                isRed = true;
+            }
+        }
 
         const suitOrder: Record<string, number> = { 'm': 0, 'p': 100, 's': 200, 'z': 300 };
-        const isRed = t.endsWith('r') || t.startsWith('0');
         const redOffset = isRed ? 0.1 : 0;
 
-        return (suitOrder[suit] || 0) + num + redOffset;
+        return (suitOrder[suit] ?? 900) + num + redOffset;
     };
     return [...hand].sort((a, b) => order(a) - order(b));
 };
@@ -28,29 +55,28 @@ export class GameState {
     current: BoardState;
 
     constructor(events: MjaiEvent[]) {
-        this.events = events;
+        // Filter out null events and start/end game events
+        this.events = events.filter(e => e && e.type !== 'start_game' && e.type !== 'end_game');
         this.cursor = 0;
         this.current = this.initialState();
 
-        // Skip initial events (start_game, etc.) and jump to first meaningful state
+        // Jump to first meaningful state (start_kyoku + 1)
         const firstKyoku = this.events.findIndex(e => e.type === 'start_kyoku');
         if (firstKyoku !== -1) {
-            // Jump to firstKyoku + 1 to ensure the start_kyoku event is processed
             this.jumpTo(firstKyoku + 1);
-        } else if (this.events.length > 2) {
-            this.jumpTo(2);
         }
     }
 
     // Returns list of indices where new rounds start
-    getKyokuCheckpoints(): { index: number, round: number, honba: number }[] {
-        const checkpoints: { index: number, round: number, honba: number }[] = [];
+    getKyokuCheckpoints(): { index: number, round: number, honba: number, scores: number[] }[] {
+        const checkpoints: { index: number, round: number, honba: number, scores: number[] }[] = [];
         this.events.forEach((e, i) => {
             if (e.type === 'start_kyoku') {
                 checkpoints.push({
                     index: i,
-                    round: (e.kyoku || 1) - 1,
-                    honba: e.honba || 0
+                    round: this.getRoundIndex(e),
+                    honba: e.honba || 0,
+                    scores: e.scores || [25000, 25000, 25000, 25000]
                 });
             }
         });
@@ -90,7 +116,8 @@ export class GameState {
     }
 
     stepBackward(): boolean {
-        if (this.cursor <= 0) return false;
+        // Prevent going back to 0 (before first start_kyoku)
+        if (this.cursor <= 1) return false;
         const target = this.cursor - 1;
         this.reset();
         while (this.cursor < target) {
@@ -100,7 +127,7 @@ export class GameState {
     }
 
     jumpTo(index: number) {
-        if (index < 0) index = 0;
+        if (index < 1) index = 1; // Enforce minimum 1
         if (index > this.events.length) index = this.events.length;
 
         if (index < this.cursor) {
@@ -143,18 +170,28 @@ export class GameState {
         this.current = this.initialState();
     }
 
+    private getRoundIndex(e: MjaiEvent): number {
+        const kyoku = (e.kyoku || 1) - 1;
+        const bakaze = e.bakaze || 'E';
+        let offset = 0;
+        if (bakaze === 'S') offset = 4;
+        else if (bakaze === 'W') offset = 8;
+        else if (bakaze === 'N') offset = 12;
+        return offset + kyoku;
+    }
+
     processEvent(e: MjaiEvent) {
         switch (e.type) {
             case 'start_game':
                 break;
             case 'start_kyoku':
-                this.current.round = (e.kyoku || 1) - 1;
+                this.current.round = this.getRoundIndex(e);
                 this.current.honba = e.honba || 0;
                 this.current.kyotaku = e.kyotaku || 0;
                 this.current.doraMarkers = [e.dora_marker];
                 this.current.currentActor = e.oya;
                 this.current.players.forEach((p, i) => {
-                    p.hand = e.tehais[i].map((t: string) => t); // Clone
+                    p.hand = sortHand(e.tehais[i].map((t: string) => t)); // Clone and sort
                     p.discards = [];
                     p.melds = [];
                     p.riichi = false;
@@ -169,6 +206,7 @@ export class GameState {
             case 'tsumo':
                 if (e.actor !== undefined && e.pai) {
                     this.current.players[e.actor].hand.push(e.pai);
+                    this.current.players[e.actor].hand = sortHand(this.current.players[e.actor].hand);
                     this.current.currentActor = e.actor;
                 }
                 break;
