@@ -49,7 +49,7 @@ class ActionType:
 class Action:
     action_type: ActionType
     tile: int
-    consume_tiles: bytes
+    consume_tiles: list[int]
 
     def __init__(self, action_type: ActionType, tile: int = 0, consume_tiles: list[int] = []): ...
     def to_dict(self) -> dict[str, Any]: ...
@@ -181,7 +181,7 @@ class RiichiEnv:
     current_claims: dict[int, Any]
     dora_indicators: list[int]
     double_riichi_declared: list[bool]
-    forbidden_discards: list[int]
+    forbidden_discards: list[list[int]]
     game_type: Any
     ippatsu_cycle: list[bool]
     is_done: bool

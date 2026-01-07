@@ -221,7 +221,7 @@ class MetadataInjector:
                         break
                 if found_idx != -1:
                     old_m = self.melds[actor].pop(found_idx)
-                    new_tiles = sorted(list(old_m.tiles) + [tid])
+                    new_tiles = sorted(old_m.tiles + [tid])
                     self.melds[actor].append(Meld(MeldType.Addgang, new_tiles, True))
                     self.is_rinshan = True
                     self.is_chankan = True  # Eligible for Chankan

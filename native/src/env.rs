@@ -64,7 +64,6 @@ pub struct Action {
     pub action_type: ActionType,
     #[pyo3(get, set)]
     pub tile: Option<u8>,
-    #[pyo3(get, set)]
     pub consume_tiles: Vec<u8>,
 }
 
@@ -134,6 +133,16 @@ impl Action {
     fn __str__(&self) -> String {
         self.__repr__()
     }
+
+    #[getter]
+    fn get_consume_tiles(&self) -> Vec<u32> {
+        self.consume_tiles.iter().map(|&x| x as u32).collect()
+    }
+
+    #[setter]
+    fn set_consume_tiles(&mut self, value: Vec<u8>) {
+        self.consume_tiles = value;
+    }
 }
 
 #[pyclass(module = "riichienv._riichienv")]
@@ -141,7 +150,6 @@ impl Action {
 pub struct Observation {
     #[pyo3(get)]
     pub player_id: u8,
-    #[pyo3(get)]
     pub hand: Vec<u8>,
     pub events_json: Vec<String>,
     #[pyo3(get)]
@@ -166,6 +174,11 @@ impl Observation {
             prev_events_size,
             legal_actions,
         }
+    }
+
+    #[getter]
+    pub fn hand(&self) -> Vec<u32> {
+        self.hand.iter().map(|&x| x as u32).collect()
     }
 
     #[getter]
@@ -257,7 +270,8 @@ impl Observation {
     pub fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Py<PyAny>> {
         let dict = PyDict::new(py);
         dict.set_item("player_id", self.player_id)?;
-        dict.set_item("hand", self.hand.clone())?;
+        let hand: Vec<u32> = self.hand.iter().map(|&x| x as u32).collect();
+        dict.set_item("hand", hand)?;
         dict.set_item("events", self.events(py)?)?;
         dict.set_item("prev_events_size", self.prev_events_size)?;
 
@@ -368,7 +382,6 @@ pub struct RiichiEnv {
     pub last_agari_results: HashMap<u8, Agari>,
     #[pyo3(get, set)]
     pub round_end_scores: Option<[i32; 4]>,
-    #[pyo3(get)]
     pub forbidden_discards: [Vec<u8>; 4],
 
     pub mjai_log: Vec<String>,
@@ -786,6 +799,28 @@ impl RiichiEnv {
     #[setter]
     fn set_dora_indicators(&mut self, dora_indicators: Vec<u32>) {
         self.dora_indicators = dora_indicators.iter().map(|&x| x as u8).collect();
+    }
+
+    #[getter]
+    fn get_forbidden_discards(&self) -> [Vec<u32>; 4] {
+        [
+            self.forbidden_discards[0]
+                .iter()
+                .map(|&x| x as u32)
+                .collect(),
+            self.forbidden_discards[1]
+                .iter()
+                .map(|&x| x as u32)
+                .collect(),
+            self.forbidden_discards[2]
+                .iter()
+                .map(|&x| x as u32)
+                .collect(),
+            self.forbidden_discards[3]
+                .iter()
+                .map(|&x| x as u32)
+                .collect(),
+        ]
     }
 
     #[pyo3(signature = (oya=None, wall=None, bakaze=None, scores=None, honba=None, kyotaku=None, seed=None))]
