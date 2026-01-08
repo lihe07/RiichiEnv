@@ -3,7 +3,7 @@ from riichienv import Meld, Phase, RiichiEnv
 
 def helper_setup_env(
     seed: int = 42,
-    game_type: int = 0,
+    game_mode: int = 0,
     hands: list[list[int]] | None = None,
     melds: list[list[Meld]] | None = None,
     active_players: list[int] | None = None,
@@ -19,7 +19,7 @@ def helper_setup_env(
     round_wind: int | None = None,
     mjai_log: list[dict] | None = None,
 ) -> RiichiEnv:
-    env = RiichiEnv(seed=seed, game_type=game_type)
+    env = RiichiEnv(seed=seed, game_mode=game_mode)
     env.reset(wall=wall)
 
     if hands is not None:

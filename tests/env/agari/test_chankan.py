@@ -21,7 +21,7 @@ class TestChankan:
                 [],
                 [],
             ],
-            game_type=0,  # game ends after one hand
+            game_mode=0,  # game ends after one hand
             drawn_tile=3,
             current_player=0,
             phase=Phase.WaitAct,
@@ -58,7 +58,7 @@ class TestChankan:
         """
         Verify that if Chankan is available but PASSed, the game proceeds with Rinshan draw.
         """
-        env = RiichiEnv(seed=42, game_type=1)
+        env = RiichiEnv(seed=42, game_mode=1)
         env.reset()
 
         # Same setup as test_chankan_ron
@@ -113,7 +113,7 @@ class TestChankan:
         """
         rule = GameRule.default_mjsoul()
 
-        env = RiichiEnv(seed=42, game_type=1, rule=rule)
+        env = RiichiEnv(seed=42, game_mode=1, rule=rule)
         env.reset()
 
         # Player 0: Performs ANKAN of 1z (East)
@@ -161,7 +161,7 @@ class TestChankan:
         """
         rule = GameRule.default_tenhou()
 
-        env = RiichiEnv(seed=42, game_type=1, rule=rule)
+        env = RiichiEnv(seed=42, game_mode=1, rule=rule)
         env.reset()
 
         # Player 0: Performs ANKAN of 1z (East)
@@ -195,7 +195,7 @@ class TestChankan:
         """
         Verify that non-Kokushi hands cannot Ron on an ANKAN.
         """
-        env = RiichiEnv(seed=42, game_type=1)
+        env = RiichiEnv(seed=42, game_mode=1)
         env.reset()
 
         # Player 0: Performs ANKAN of 1z
