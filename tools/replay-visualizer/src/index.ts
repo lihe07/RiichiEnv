@@ -110,22 +110,23 @@ export class Viewer {
     showRoundSelector() {
         // Create Modal Overlay
         const overlay = document.createElement('div');
-        overlay.className = 'modal-overlay';
+        overlay.className = 're-modal-overlay';
         overlay.onclick = () => {
             overlay.remove();
         };
 
         const content = document.createElement('div');
-        content.className = 'modal-content';
+        content.className = 're-modal-content';
         content.onclick = (e) => e.stopPropagation();
 
         const title = document.createElement('h3');
         title.textContent = 'Jump to Round';
+        title.className = 're-modal-title';
         title.style.marginTop = '0';
         content.appendChild(title);
 
         const table = document.createElement('table');
-        table.className = 'kyoku-table';
+        table.className = 're-kyoku-table';
 
         // Header
         const thead = document.createElement('thead');
@@ -147,7 +148,7 @@ export class Viewer {
 
         checkpoints.forEach((cp) => {
             const tr = document.createElement('tr');
-            tr.className = 'kyoku-row';
+            tr.className = 're-kyoku-row';
             tr.onclick = () => {
                 this.gameState.jumpTo(cp.index + 1);
                 this.update();

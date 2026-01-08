@@ -79,15 +79,18 @@ export class Renderer {
                     border-radius: 12px;
                 }
                 
-                .river-grid {
-                    display: grid;
-                    grid-template-columns: repeat(6, 34px);
-                    grid-template-rows: repeat(3, 46px);
+                .river-container {
+                    display: flex;
+                    flex-direction: column;
                     gap: 2px;
-                    width: 214px; 
-                    height: 142px;
-                    justify-content: start; 
+                    width: auto;
+                    height: auto;
+                    justify-content: start;
                     align-content: start;
+                }
+                .river-row {
+                    display: flex;
+                    gap: 2px;
                 }
                 
                 .tile-rotated {
@@ -113,121 +116,8 @@ export class Renderer {
                     animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
                 }
 
-                .modal-overlay {
-                    position: absolute;
-                    top: 50%; left: 50%;
-                    transform: translate(-50%, -50%);
-                    background: rgba(0,0,0,0.9);
-                    color: white;
-                    padding: 20px;
-                    border-radius: 12px;
-                    border: 1px solid #555;
-                    z-index: 200;
-                    text-align: center;
-                    min-width: 400px;
-                    box-shadow: 0 0 30px rgba(0,0,0,0.8);
-                    animation: fadeIn 0.3s;
-                }
-                .modal-title { font-size: 1.5em; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #777; padding-bottom: 5px; }
-                .modal-content { text-align: left; }
-                .yaku-list { margin: 10px 0; padding-left: 20px; }
-                .score-display { font-size: 1.2em; text-align: center; margin-top: 15px; font-weight: bold; background: #333; padding: 5px; border-radius: 4px;}
-
-                .riichi-stick {
-                    width: 100px;
-                    height: 8px;
-                    background: #eee;
-                    border-radius: 4px;
-                    border: 1px solid #999;
-                    position: relative;
-                    box-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-                }
-                .riichi-stick::after {
-                    content: "";
-                    position: absolute;
-                    left: 50%;
-                    top: 50%;
-                    width: 6px;
-                    height: 6px;
-                    background: red;
-                    border-radius: 50%;
-                    transform: translate(-50%, -50%);
-                }
-
-                .debug-panel {
-                    position: absolute;
-                    top: 10px;
-                    left: 10px;
-                    background: rgba(0, 0, 0, 0.7);
-                    color: #0f0;
-                    font-family: monospace;
-                    padding: 10px;
-                    border-radius: 4px;
-                    font-size: 11px;
-                    width: 300px;
-                    max-height: 200px;
-                    overflow-y: scroll;
-                    white-space: pre-wrap;
-                    box-sizing: border-box;
-                    border: 1px solid #444;
-                    z-index: 500;
-                    display: none; /* Hidden by default, toggled by JS */
-                }
-
-                .log-toggle-btn {
-                    position: absolute;
-                    bottom: 10px;
-                    right: 10px;
-                    background: rgba(255, 255, 255, 0.8);
-                    border: 1px solid #999;
-                    border-radius: 4px;
-                    padding: 5px 10px;
-                    cursor: pointer;
-                    font-weight: bold;
-                    z-index: 501;
-                    user-select: none;
-                }
-                .log-toggle-btn:hover {
-                    background: #fff;
-                }
-
-                @keyframes popIn {
-                    from { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
-                    to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-                }
-                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-                .player-info-box {
-                    width: 100px;
-                    background: rgba(0, 0, 0, 0.5);
-                    opacity: 0.5;
-                    transition: opacity 0.2s, background-color 0.2s;
-                    color: white;
-                    padding: 8px;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: center;
-                    margin-left: 10px;
-                    user-select: none;
-                }
-                .player-info-box:hover {
-                    opacity: 1.0;
-                    background: rgba(0, 0, 0, 0.7);
-                }
-                .active-viewpoint {
-                    border: 1px solid #ffd700;
-                }
-                .center-info {
-                    cursor: pointer;
-                    transition: transform 0.2s, background-color 0.2s;
-                }
-                .center-info:hover {
-                    transform: translate(-50%, -50%) scale(1.05) !important;
-                    background-color: #2a4d25 !important;
-                }
-                .modal-overlay {
-                    position: absolute;
+                .re-modal-overlay {
+                    position: fixed;
                     top: 0; left: 0;
                     width: 100%;
                     height: 100%;
@@ -237,35 +127,47 @@ export class Renderer {
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    transform: none !important; /* Force reset to avoid inheritance issues */
+                    animation: fadeIn 0.3s;
                 }
-                .modal-content {
+                .re-modal-title { 
+                    font-size: 1.5em; 
+                    font-weight: bold; 
+                    margin-bottom: 10px; 
+                    border-bottom: 1px solid #777; 
+                    padding-bottom: 5px; 
+                }
+                .re-modal-content {
                     background: #0d1f0d;
                     color: #fff;
                     padding: 20px;
                     border-radius: 8px;
                     max-width: 90%;
                     max-height: 80%;
+                    min-width: 400px;
                     overflow-y: auto;
                     box-shadow: 0 4px 12px rgba(0,0,0,0.8);
                     border: 1px solid #2a4d25;
+                    text-align: left;
                 }
-                .kyoku-table {
+                .re-yaku-list { margin: 10px 0; padding-left: 20px; columns: 2; }
+                .re-score-display { iconfont-size: 1.2em; text-align: center; margin-top: 15px; font-weight: bold; background: #333; padding: 5px; border-radius: 4px;}
+
+                .re-kyoku-table {
                     width: 100%;
                     border-collapse: collapse;
                     font-size: 14px;
                 }
-                .kyoku-table th, .kyoku-table td {
+                .re-kyoku-table th, .re-kyoku-table td {
                     border: 1px solid #2a4d25;
                     padding: 8px;
                     text-align: center;
                 }
-                .kyoku-table th {
+                .re-kyoku-table th {
                     background-color: #1a3317;
                     position: sticky;
                     top: 0;
                 }
-                .kyoku-row:hover {
+                .re-kyoku-row:hover {
                     background-color: #2a4d25;
                     cursor: pointer;
                 }
@@ -451,25 +353,57 @@ export class Renderer {
 
             // River
             const riverDiv = document.createElement('div');
-            riverDiv.className = 'river-grid';
-            p.discards.forEach(d => {
-                const cell = document.createElement('div');
-                cell.style.width = '34px';
-                cell.style.height = '46px';
-                cell.style.position = 'relative';
+            riverDiv.className = 'river-container';
 
-                if (d.isRiichi) {
-                    const inner = document.createElement('div');
-                    inner.style.width = '100%'; inner.style.height = '100%';
-                    inner.className = 'tile-rotated';
-                    inner.innerHTML = this.getTileHtml(d.tile);
-                    cell.appendChild(inner);
-                } else {
-                    cell.innerHTML = this.getTileHtml(d.tile);
-                }
-                if (d.isTsumogiri) cell.style.filter = 'brightness(0.7)';
-                riverDiv.appendChild(cell);
+            // Split discards into rows
+            const rows: any[][] = [[], [], []];
+            p.discards.forEach((d, idx) => {
+                if (idx < 6) rows[0].push(d);
+                else if (idx < 12) rows[1].push(d);
+                else rows[2].push(d);
             });
+
+            rows.forEach((rowTiles) => {
+                if (rowTiles.length === 0) return; // Skip empty rows (except maybe we want to keep height? css grid did that. Flex won't unless min-height)
+                // Actually if row 2 is empty but row 3 has something (impossible in normal flow), we might need spacing.
+                // But for valid game states, they fill in order.
+
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'river-row';
+                // Enforce height for consistent look even if row is empty (though we skip empty)
+                // Each tile is 46px high.
+                rowDiv.style.height = '46px';
+
+                rowTiles.forEach(d => {
+                    const cell = document.createElement('div');
+                    cell.style.width = '34px';
+                    cell.style.height = '46px';
+                    cell.style.position = 'relative';
+
+                    if (d.isRiichi) {
+                        const inner = document.createElement('div');
+                        inner.style.width = '100%'; inner.style.height = '100%';
+                        inner.className = 'tile-rotated';
+                        inner.innerHTML = this.getTileHtml(d.tile);
+                        cell.appendChild(inner);
+                    } else {
+                        cell.innerHTML = this.getTileHtml(d.tile);
+                    }
+                    if (d.isTsumogiri) cell.style.filter = 'brightness(0.7)';
+                    rowDiv.appendChild(cell);
+                });
+                riverDiv.appendChild(rowDiv);
+            });
+
+            // Ensure we have at least 'something' if empty? No, existing code didn't handle that explicitly but grid kept size.
+            // If river is empty, height is 0. Old one was fixed height 142px.
+            // Let's set min-height or just let it grow. User wants layout change.
+            // Be careful about layout shift.
+            // The riverRow.parentNode (pDiv child) was flexible.
+            // Let's explicitly set min-height to match old grid if needed, or just let it adjust.
+            // For now, auto is fine, but we might want to ensure spacing for visual consistency.
+            // Let's rely on flex.
+
             riverRow.appendChild(riverDiv);
 
             // Info Box (New Overlay)
@@ -587,14 +521,14 @@ export class Renderer {
         if (state.lastEvent && state.lastEvent.type === 'end_kyoku' && state.lastEvent.meta && state.lastEvent.meta.results) {
             const results = state.lastEvent.meta.results;
             const modal = document.createElement('div');
-            modal.className = 'modal-overlay';
+            modal.className = 're-modal-overlay';
             Object.assign(modal.style, {
                 maxHeight: '80vh',
                 overflowY: 'auto',
                 width: '450px'
             });
 
-            let combinedHtml = `<div class="modal-title">End Kyoku</div>`;
+            let combinedHtml = `<div class="re-modal-title">End Kyoku</div>`;
             results.forEach((res: any, idx: number) => {
                 const score = res.score;
                 const actor = res.actor;
@@ -607,18 +541,18 @@ export class Renderer {
                 }).join('');
 
                 combinedHtml += `
-                    <div class="result-item" style="margin-bottom: 20px; ${idx > 0 ? 'border-top: 1px solid #555; padding-top: 15px;' : ''}">
+                    <div class="re-result-item" style="margin-bottom: 20px; ${idx > 0 ? 'border-top: 1px solid #555; padding-top: 15px;' : ''}">
                         <div style="font-weight: bold; margin-bottom: 5px; color: #ffd700; font-size: 1.2em;">
                             P${actor} ${isTsumo ? 'Tsumo' : 'Ron from P' + target}
                         </div>
-                        <div class="modal-content">
-                            <ul class="yaku-list" style="columns: 2;">${yakuListHtml}</ul>
+                        <div class="re-modal-content">
+                            <ul class="re-yaku-list" style="columns: 2;">${yakuListHtml}</ul>
                             <div style="display:flex; justify-content:space-between; margin-top:10px; font-weight:bold;">
                                 <span>${score.han} Han</span>
                                 <span>${score.fu} Fu</span>
                             </div>
                         </div>
-                        <div class="score-display">
+                        <div class="re-score-display">
                             ${score.points} Points
                         </div>
                     </div>
