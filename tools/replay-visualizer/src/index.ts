@@ -17,48 +17,156 @@ export class Viewer {
         this.container = el;
         this.log = log;
 
-        // Setup DOM Structure
+        // Setup DOM Structure: 2-Column Flex (Main Area + Right Sidebar)
+        // Reset Body / HTML to prevent default margins causing scrollbars
+        document.body.style.margin = '0';
+        document.body.style.padding = '0';
+        document.body.style.overflow = 'hidden';
+        document.body.style.height = '100vh';
+        document.body.style.width = '100vw';
+        document.documentElement.style.margin = '0';
+        document.documentElement.style.padding = '0';
+        document.documentElement.style.overflow = 'hidden';
+        document.documentElement.style.height = '100vh';
+        document.documentElement.style.width = '100vw';
+
         this.container.innerHTML = '';
         Object.assign(this.container.style, {
             display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
+            flexDirection: 'row',
             width: '100%',
-            maxWidth: '1000px',
-            margin: '0 auto',
-            backgroundColor: '#f8f8f8',
-            border: '1px solid #ddd',
-            borderRadius: '8px',
-            paddingBottom: '20px'
+            height: '100vh',
+            backgroundColor: '#000',
+            overflow: 'hidden',
+            margin: '0',
+            padding: '0'
         });
 
+        // Scrollable Main Content Area
+        const scrollContainer = document.createElement('div');
+        Object.assign(scrollContainer.style, {
+            flex: '1',
+            height: '100%',
+            position: 'relative',
+            overflow: 'hidden', // Disable scrolling entirely
+            backgroundColor: '#000',
+            display: 'flex',       // Center child
+            alignItems: 'center',
+            justifyContent: 'center'
+        });
+        this.container.appendChild(scrollContainer);
+
+        // 1. Board Wrapper (Main Area)
+        const boardWrapper = document.createElement('div');
+        Object.assign(boardWrapper.style, {
+            width: '100%',
+            height: '100%', // Full size
+            position: 'relative',
+            backgroundColor: '#000',
+            overflow: 'hidden'
+        });
+        scrollContainer.appendChild(boardWrapper);
+
+        // The View Area - Fixed Base Size 900x900
         const viewArea = document.createElement('div');
         viewArea.id = `${containerId}-board`;
         Object.assign(viewArea.style, {
-            width: '100%',
-            aspectRatio: '1/1',
-            position: 'relative' // Needed for overlay positioning
+            width: '900px',
+            height: '900px',
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)', // Initial center
+            transformOrigin: 'center center',
+            backgroundColor: '#2d5a27', // Board background
+            boxShadow: '0 0 20px rgba(0,0,0,0.5)'
         });
-        this.container.appendChild(viewArea);
+        boardWrapper.appendChild(viewArea);
+
+        // 2. Right Sidebar (Controls) - Fixed Width
+        const rightSidebar = document.createElement('div');
+        Object.assign(rightSidebar.style, {
+            width: '80px', // Fixed width for icons
+            backgroundColor: '#111',
+            borderLeft: '1px solid #333',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '15px',
+            padding: '20px 10px',
+            paddingTop: '50px',
+            alignItems: 'center',
+            flexShrink: '0',
+            zIndex: '500',
+            height: '100%' // Full height
+        });
+        this.container.appendChild(rightSidebar);
 
         this.debugPanel = document.createElement('div');
         this.debugPanel.className = 'debug-panel';
-        viewArea.appendChild(this.debugPanel); // Append to board area for overlay
+        // Debug Panel in boardWrapper so it scrolls with board
+        Object.assign(this.debugPanel.style, {
+            position: 'absolute',
+            top: '0',
+            left: '0',
+            width: '100%',
+            zIndex: '1000'
+        });
+        boardWrapper.appendChild(this.debugPanel);
 
-        // Toggle Button
-        const toggleBtn = document.createElement('div');
-        toggleBtn.className = 'log-toggle-btn';
-        toggleBtn.textContent = 'Show Log';
-        toggleBtn.onclick = () => {
-            if (this.debugPanel.style.display === 'none' || !this.debugPanel.style.display) {
+        // Helper to create buttons
+        const createBtn = (text: string, onClick: () => void) => {
+            const btn = document.createElement('div');
+            btn.className = 'icon-btn';
+            btn.textContent = text;
+            btn.onclick = onClick;
+            return btn;
+        };
+
+        // Control Buttons
+        // Show/Hide Log
+        const logBtn = createBtn('📜', () => {
+            const display = this.debugPanel.style.display;
+            if (display === 'none' || !display) {
                 this.debugPanel.style.display = 'block';
-                toggleBtn.textContent = 'Hide Log';
+                logBtn.classList.add('active-btn');
             } else {
                 this.debugPanel.style.display = 'none';
-                toggleBtn.textContent = 'Show Log';
+                logBtn.classList.remove('active-btn');
             }
-        };
-        viewArea.appendChild(toggleBtn);
+        });
+        rightSidebar.appendChild(logBtn);
+
+        // Prev Step
+        rightSidebar.appendChild(createBtn('◀️', () => {
+            if (this.gameState.stepBackward()) this.update();
+        }));
+
+        // Next Step
+        rightSidebar.appendChild(createBtn('▶️', () => {
+            if (this.gameState.stepForward()) this.update();
+        }));
+
+        // Auto Play
+        let autoPlayTimer: number | null = null;
+        const autoBtn = createBtn('⏯️', () => {
+            if (autoPlayTimer) {
+                clearInterval(autoPlayTimer);
+                autoPlayTimer = null;
+                autoBtn.classList.remove('active-btn');
+            } else {
+                autoBtn.classList.add('active-btn');
+                autoPlayTimer = window.setInterval(() => {
+                    if (!this.gameState.stepForward()) {
+                        if (autoPlayTimer) clearInterval(autoPlayTimer);
+                        autoPlayTimer = null;
+                        autoBtn.classList.remove('active-btn');
+                    } else {
+                        this.update();
+                    }
+                }, 200); // 200ms per step
+            }
+        });
+        rightSidebar.appendChild(autoBtn);
 
         this.gameState = new GameState(log);
         this.renderer = new Renderer(viewArea);
@@ -81,7 +189,14 @@ export class Viewer {
         this.update();
 
         // Mouse Wheel Navigation
-        viewArea.addEventListener('wheel', (e: WheelEvent) => {
+        window.addEventListener('wheel', (e: WheelEvent) => {
+            // e.preventDefault(); 
+        }, { passive: false });
+
+        // Add listener specifically to boardWrapper for navigation
+        boardWrapper.addEventListener('wheel', (e: WheelEvent) => {
+            // User wants to use wheel for steps. We must prevent default scrolling behavior
+            // to avoid scrolling the page while stepping.
             e.preventDefault();
             if (e.deltaY > 0) {
                 if (this.gameState.stepForward()) this.update();
@@ -90,21 +205,29 @@ export class Viewer {
             }
         }, { passive: false });
 
-        // Responsive Scaling
+        // Robust Responsive Scaling (Contain Strategy)
+        const handleResize = () => {
+            const wrapperRect = boardWrapper.getBoundingClientRect();
+            const availableWidth = wrapperRect.width;
+            const availableHeight = wrapperRect.height;
+            const baseSize = 900;
+
+            // Calculate scale to CONTAIN (Fit Window)
+            const scale = Math.min(availableWidth / baseSize, availableHeight / baseSize);
+
+            // Apply scale + center
+            viewArea.style.transform = `translate(-50%, -50%) scale(${scale})`;
+        };
+
         if ('ResizeObserver' in window) {
-            const ro = new ResizeObserver(entries => {
-                for (const entry of entries) {
-                    this.renderer.resize(entry.contentRect.width);
-                }
-            });
-            ro.observe(viewArea);
+            // Observe the SCROLL CONTAINER logic width
+            const ro = new ResizeObserver(() => handleResize());
+            ro.observe(scrollContainer);
         } else {
-            // Fallback for very old browsers
-            window.addEventListener('resize', () => {
-                this.renderer.resize(viewArea.clientWidth);
-            });
-            setTimeout(() => this.renderer.resize(viewArea.clientWidth), 0);
+            window.addEventListener('resize', handleResize);
         }
+        // Initial call
+        setTimeout(handleResize, 0);
     }
 
     showRoundSelector() {

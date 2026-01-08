@@ -154,22 +154,33 @@ export class Renderer {
                     animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
                 }
 
-                .log-toggle-btn {
-                    position: absolute;
-                    bottom: 10px;
-                    left: 10px;
-                    z-index: 100;
-                    padding: 8px 12px;
-                    background: rgba(0,0,0,0.6);
+                .icon-btn {
+                    width: 40px;
+                    height: 40px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    background: transparent;
                     color: white;
-                    border-radius: 4px;
+                    border: 1px solid #666;
+                    border-radius: 8px;
                     cursor: pointer;
-                    font-size: 14px;
                     user-select: none;
-                    transition: background-color 0.2s;
+                    transition: all 0.2s;
+                    font-size: 20px;
                 }
-                .log-toggle-btn:hover {
-                    background: rgba(0,0,0,0.8);
+                .icon-btn:hover {
+                    background: rgba(255, 255, 255, 0.1);
+                    border-color: #999;
+                }
+                .icon-btn:active {
+                    transform: translateY(1px);
+                    background: rgba(255, 255, 255, 0.2);
+                }
+                .active-btn {
+                    background: #2a4d25 !important;
+                    border-color: #4caf50 !important;
+                    box-shadow: 0 0 5px #4caf50;
                 }
 
                 .debug-panel {
