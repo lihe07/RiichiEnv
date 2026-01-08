@@ -77,12 +77,7 @@ mod unit_tests {
 
     #[test]
     fn test_score_calculation() {
-        // Mangan: 30fu 4han -> 7700 or 8000 (usually rounded) -> 2000 base
-        // 30 * 2^(2+4) = 30 * 64 = 1920 -> 2000.
-        // Ko Tsumo: 2000/4000? No, mangan is 8000 total.
-        // Oya pays 4000, ko pays 2000.
-
-        // Update: Current implementation does NOT do Kiriage Mangan (rounding 1920->2000).
+        // Current implementation does NOT do Kiriage Mangan (rounding 1920->2000).
         // So base is 1920.
         // Oya pays: ceil(1920*2/100)*100 = 3900.
         // Ko pays: ceil(1920/100)*100 = 2000.
@@ -209,23 +204,6 @@ mod unit_tests {
         }
     }
 
-    // Helper to simulate a draw (requires some internal logic access or just setting state to simulate result of turn)
-    // Unfortunately we can't easily call private _trigger_ryukyoku.
-    // However, we can simulate the "end" of a kyoku by calling _initialize_next_round manually??
-    // No, _initialize_next_round is also private.
-    //
-    // Wait, the previous steps removed `initialize_next_round_debug` and `trigger_ryukyoku_debug`.
-    // So we CANNOT use them.
-    //
-    // But we are in `tests` module, which is a child of `lib`. `env` is a sibling module.
-    // Private methods in `env::RiichiEnv` are NOT accessible.
-    //
-    // The user asked to add "unit tests".
-    // I can modify `env.rs` to allow `pub(crate)` visibility for these methods!
-    // This maintains encapsulation (hidden from Python/Public API) but allows crate-level tests.
-
-    // I should create a new step to modify `env.rs` first to define `pub(crate)` visibility for `_initialize_next_round` and `_trigger_ryukyoku`.
-
     #[test]
     fn test_sudden_death_hanchan_logic() {
         use serde_json::Value;
@@ -288,51 +266,6 @@ mod unit_tests {
             .collect();
 
         // Expect ryukyoku -> end_kyoku -> end_game
-        // Note: _trigger_ryukyoku emits ryukyoku.
-        // _initialize_next_round emits end_kyoku (implied? No, actually end_kyoku might be emitted inside trigger or initialize?)
-        // Let's check logic:
-        // _trigger_ryukyoku calls _push_mjai_event("ryukyoku").
-        // Then it checks _is_game_over. If game over -> emits end_game.
-        // else -> needs_initialize_next_round.
-
-        // Wait, if _trigger_ryukyoku finds !game_over, it does NOT emit end_kyoku?
-        // Ah, `_end_kyoku_ryukyoku` emits "ryukyoku".
-        // `_initialize_next_round` calls `_initialize_round`.
-        // Where is `end_kyoku`?
-        // `end_kyoku` is usually emitted by Python side or if we missed it?
-        // Checking `env.rs`: `_end_kyoku_ryukyoku` emits `ryukyoku`.
-        // `_end_kyoku_ryukyoku` sets `round_end_scores`.
-        // Does it emit `end_kyoku`?
-        // Line 564 in prev view: `ev.insert("type", "end_kyoku")`???
-        // Wait, checking line 564 in Step 273 output:
-        // `ev.insert("type".to_string(), Value::String("end_kyoku".to_string()));`
-        // THIS IS WRONG? `_end_kyoku_ryukyoku` usually emits Ryukyoku event FIRST, then maybe end_kyoku?
-        // Let me check `_end_kyoku_ryukyoku` code again.
-        // Step 142 view:
-        // fn _end_kyoku_ryukyoku(...) {
-        //   ...
-        //   ev.insert("type", "ryukyoku")
-        //   this._push_mjai_event(ev)
-        //   if is_game_over -> end_game
-        //   else -> needs_init = true
-        // }
-        // So it emits "ryukyoku".
-
-        // My fix added `end_game` emission in `_initialize_next_round`.
-        // But what about `end_kyoku`?
-        // `end_kyoku` event usually contains the delta scores.
-        // `ryukyoku` event contains "reason" and "tehai"?
-        // Actually, MJAI spec: `ryukyoku` has `sc` (scores)?
-        // `end_kyoku` is separate event?
-        // Standard MJAI: `ryukyoku` event happens.
-        // Then `end_kyoku`?
-        // In this env, `_end_kyoku_ryukyoku` emits a "ryukyoku" type event.
-        // Let's look at logs from `test_mjai_event_order` failure: `Game should be done`.
-        // It failed `assertion left == right` (3 vs 0).
-
-        // Let's assume the order is: `ryukyoku` -> [maybe `end_kyoku`] -> `end_game`.
-        // I will just assert that `end_game` is the last event, and `ryukyoku` is present before it.
-
         let last_event = event_types.last().expect("Should have events");
         assert_eq!(last_event, "end_game");
 
