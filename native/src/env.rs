@@ -403,6 +403,8 @@ pub struct RiichiEnv {
     pub skip_mjai_logging: bool,
     #[pyo3(get)]
     pub seed: Option<u64>,
+    #[pyo3(get)]
+    pub rule: crate::rule::GameRule,
 }
 
 impl RiichiEnv {
@@ -713,12 +715,13 @@ fn _tid_to_mjai_hand(hand: &[u8]) -> Vec<String> {
 #[pymethods]
 impl RiichiEnv {
     #[new]
-    #[pyo3(signature = (game_type=None, skip_mjai_logging=false, seed=None, round_wind=None))]
+    #[pyo3(signature = (game_type=None, skip_mjai_logging=false, seed=None, round_wind=None, rule=None))]
     pub fn new(
         game_type: Option<Bound<'_, PyAny>>,
         skip_mjai_logging: bool,
         seed: Option<u64>,
         round_wind: Option<u8>,
+        rule: Option<crate::rule::GameRule>,
     ) -> PyResult<Self> {
         let gt = if let Some(val) = game_type {
             if let Ok(s) = val.extract::<String>() {
@@ -747,7 +750,7 @@ impl RiichiEnv {
             0 // Default to 4p-red-single
         };
 
-        Ok(RiichiEnv {
+        let mut env = RiichiEnv {
             wall: Vec::new(),
             hands: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
             melds: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
@@ -797,7 +800,10 @@ impl RiichiEnv {
             skip_mjai_logging,
             seed,
             forbidden_discards: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
-        })
+            rule: rule.unwrap_or(crate::rule::GameRule::default()),
+        };
+        Python::with_gil(|py| env.reset(py, None, None, round_wind, None, None, None, seed))?;
+        Ok(env)
     }
 
     #[getter]
@@ -1219,7 +1225,11 @@ impl RiichiEnv {
         py: Python<'py>,
         actions: HashMap<u8, Action>,
     ) -> PyResult<Py<PyAny>> {
+        // println!("DEBUG RUST: step called. is_done={}", self.is_done);
         while !self.is_done {
+            if let Some(act) = actions.get(&self.current_player) {
+                // println!("DEBUG RUST: Processing action for player {}: {:?}", self.current_player, act);
+            }
             if self.needs_initialize_next_round {
                 self._initialize_next_round(self.pending_oya_won, self.pending_is_draw);
                 if self.is_done {
@@ -1494,56 +1504,60 @@ impl RiichiEnv {
                         if indices.len() >= 4 {
                             // Check Chankan (Kokushi)
                             let mut chankan_ronners = Vec::new();
-                            for i in 0..4 {
-                                if i == pid {
-                                    continue;
-                                }
-                                // Check missed agari (Temporary Furiten)
-                                if self.missed_agari_doujun[i as usize]
-                                    || self.missed_agari_riichi[i as usize]
-                                {
-                                    continue;
-                                }
-                                // Kokushi Check (Ankan Chankan restriction)
-                                let melds = &self.melds[i as usize];
-                                if !melds.is_empty() {
-                                    continue;
-                                }
+                            // If rule allows Ron on Ankan for Kokushi check
+                            // Standard: Tenhou (False), MJSoul (True)
+                            let check_chankan = self.rule.allows_ron_on_ankan_for_kokushi_musou;
 
-                                let hand = &self.hands[i as usize];
-                                let calc = crate::agari_calculator::AgariCalculator::new(
-                                    hand.clone(),
-                                    melds.clone(),
-                                );
+                            if check_chankan {
+                                for i in 0..4 {
+                                    if i == pid {
+                                        continue;
+                                    }
+                                    // Check missed agari (Temporary Furiten)
+                                    if self.missed_agari_doujun[i as usize]
+                                        || self.missed_agari_riichi[i as usize]
+                                    {
+                                        continue;
+                                    }
+                                    // Kokushi Check (Ankan Chankan restriction)
+                                    let melds = &self.melds[i as usize];
+                                    if !melds.is_empty() {
+                                        continue;
+                                    }
 
-                                // Furiten Check
-                                if calc
-                                    .get_waits_u8()
-                                    .iter()
-                                    .any(|&w| self.discards[i as usize].iter().any(|&d| d / 4 == w))
-                                {
-                                    continue;
-                                }
+                                    let hand = &self.hands[i as usize];
+                                    let calc = crate::agari_calculator::AgariCalculator::new(
+                                        hand.clone(),
+                                        melds.clone(),
+                                    );
 
-                                // Agari check with Kokushi constraint
-                                let cond = Conditions {
-                                    chankan: true,
-                                    player_wind: Wind::from((i + 4 - self.oya) % 4),
-                                    round_wind: Wind::from(self.round_wind),
-                                    ..Default::default()
-                                };
-                                let agari = calc.calc(
-                                    tile,
-                                    self.dora_indicators.clone(),
-                                    vec![],
-                                    Some(cond),
-                                );
+                                    // Furiten Check
+                                    if calc.get_waits_u8().iter().any(|&w| {
+                                        self.discards[i as usize].iter().any(|&d| d / 4 == w)
+                                    }) {
+                                        continue;
+                                    }
 
-                                if agari.agari
-                                    && (agari.yaku.contains(&yaku::ID_KOKUSHI)
-                                        || agari.yaku.contains(&yaku::ID_KOKUSHI_13))
-                                {
-                                    chankan_ronners.push(i);
+                                    // Agari check with Kokushi constraint
+                                    let cond = Conditions {
+                                        chankan: true,
+                                        player_wind: Wind::from((i + 4 - self.oya) % 4),
+                                        round_wind: Wind::from(self.round_wind),
+                                        ..Default::default()
+                                    };
+                                    let agari = calc.calc(
+                                        tile,
+                                        self.dora_indicators.clone(),
+                                        vec![],
+                                        Some(cond),
+                                    );
+
+                                    if agari.agari
+                                        && (agari.yaku.contains(&yaku::ID_KOKUSHI)
+                                            || agari.yaku.contains(&yaku::ID_KOKUSHI_13))
+                                    {
+                                        chankan_ronners.push(i);
+                                    }
                                 }
                             }
 

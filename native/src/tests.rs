@@ -201,6 +201,7 @@ mod unit_tests {
             skip_mjai_logging: false,
             seed: None,
             forbidden_discards: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
+            rule: crate::rule::GameRule::default(),
         }
     }
 
