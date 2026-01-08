@@ -188,7 +188,7 @@ export class Renderer {
                     top: 0;
                     left: 0;
                     width: 100%;
-                    height: 150px;
+                    height: 180px;
                     background: rgba(0, 0, 0, 0.85);
                     color: #0f0;
                     font-family: 'Consolas', 'Monaco', monospace;
@@ -202,13 +202,13 @@ export class Renderer {
                 }
 
                 .re-modal-overlay {
-                    position: fixed;
+                    position: absolute; /* Changed from fixed to absolute */
                     top: 0; left: 0;
                     width: 100%;
                     height: 100%;
                     box-sizing: border-box;
                     background: rgba(0,0,0,0.6);
-                    z-index: 9999;
+                    z-index: 2000; /* Increased z-index */
                     display: flex;
                     align-items: center;
                     justify-content: center;
@@ -226,7 +226,7 @@ export class Renderer {
                     color: #fff;
                     padding: 20px;
                     border-radius: 8px;
-                    max-width: 90%;
+                    max-width: 560px;
                     max-height: 80%;
                     min-width: 400px;
                     overflow-y: auto;
@@ -241,19 +241,24 @@ export class Renderer {
                     width: 100%;
                     border-collapse: collapse;
                     font-size: 14px;
+                    background-color: transparent !important;
+                    color: white !important;
                 }
                 .re-kyoku-table th, .re-kyoku-table td {
                     border: 1px solid #2a4d25;
                     padding: 8px;
                     text-align: center;
+                    background-color: #0d1f0d !important;
+                    color: white !important;
                 }
                 .re-kyoku-table th {
-                    background-color: #1a3317;
+                    background-color: #1a3317 !important;
                     position: sticky;
                     top: 0;
+                    color: white !important;
                 }
-                .re-kyoku-row:hover {
-                    background-color: #2a4d25;
+                .re-kyoku-row:hover td {
+                    background-color: #2a4d25 !important;
                     cursor: pointer;
                 }
             `;
@@ -309,6 +314,14 @@ export class Renderer {
             this.container.appendChild(this.boardElement);
         }
         const board = this.boardElement;
+
+        console.log("[Renderer] render() called. State:", {
+            round: state.round,
+            players: state.players.length,
+            doraMarkers: state.doraMarkers,
+            eventIndex: state.eventIndex
+        });
+
         board.innerHTML = '';
 
         // Center Info

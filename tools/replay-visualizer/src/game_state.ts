@@ -138,31 +138,96 @@ export class GameState {
         }
     }
 
-    // Jump to next/prev turn for a specific actor
-    stepTurn(forward: boolean, actor: number) {
-        let target = this.cursor;
-        const len = this.events.length;
-
-        if (forward) {
-            for (let i = this.cursor + 1; i < len; i++) {
-                const e = this.events[i];
-                if (e.actor === actor && ['tsumo', 'dahai', 'pon', 'chi', 'kan', 'daiminkan', 'kakan', 'ankan'].includes(e.type)) {
-                    target = i;
-                    break;
-                }
+    // Jump to next turn for specific actor (tsumo event)
+    jumpToNextTurn(actor: number): boolean {
+        let target = -1;
+        for (let i = this.cursor; i < this.events.length; i++) {
+            const e = this.events[i];
+            if (e.type === 'tsumo' && e.actor === actor) {
+                target = i;
+                break;
             }
-        } else {
-            // Step back once to avoid staying on current event if we are on an actor's event
-            for (let i = this.cursor - 2; i >= 0; i--) {
-                const e = this.events[i];
-                if (e.actor === actor && ['tsumo', 'dahai', 'pon', 'chi', 'kan', 'daiminkan', 'kakan', 'ankan'].includes(e.type)) {
+        }
+
+        if (target !== -1) {
+            // Jump to target + 1 (State AFTER tsumo)
+            this.jumpTo(target + 1);
+            return true;
+        }
+        return false;
+    }
+
+    // Jump to prev turn for specific actor
+    jumpToPrevTurn(actor: number): boolean {
+        let target = -1;
+        // Search backwards from cursor - 2 (current event is cursor-1)
+        for (let i = this.cursor - 2; i >= 0; i--) {
+            const e = this.events[i];
+            if (e.type === 'tsumo' && e.actor === actor) {
+                target = i;
+                break;
+            }
+        }
+
+        if (target !== -1) {
+            this.jumpTo(target + 1);
+            return true;
+        }
+        return false;
+    }
+
+    jumpToNextKyoku(): boolean {
+        let target = -1;
+        for (let i = this.cursor; i < this.events.length; i++) {
+            if (this.events[i].type === 'start_kyoku') {
+                target = i;
+                break;
+            }
+        }
+        if (target !== -1) {
+            this.jumpTo(target + 1);
+            return true;
+        }
+        return false;
+    }
+
+    jumpToPrevKyoku(): boolean {
+        let target = -1;
+        // Search backwards. If we are currently AT a start_kyoku (cursor is just after it), 
+        // we likely want the PREVIOUS one, so search from cursor - 2.
+        // But if we are mid-game, finding the *current* start_kyoku is basically "Restart Kyoku".
+        // The user asked for "Previous Kyoku", which implies index - 1.
+
+        // Let's interpret "Prev Kyoku" as:
+        // 1. Find the start_kyoku of the CURRENT round first.
+        // 2. If we are far into the round, maybe just jumping to START of current is okay?
+        // User probably expects: Round 1 -> Round 2 -> [Prev] -> Round 1.
+
+        // Algorithm:
+        // Find the index of the start_kyoku for the CURRENT cursor position.
+        let currentKyokuStart = -1;
+        for (let i = this.cursor - 1; i >= 0; i--) {
+            if (this.events[i].type === 'start_kyoku') {
+                currentKyokuStart = i;
+                break;
+            }
+        }
+
+        // Now search backwards from there
+        if (currentKyokuStart !== -1) {
+            for (let i = currentKyokuStart - 1; i >= 0; i--) {
+                if (this.events[i].type === 'start_kyoku') {
                     target = i;
                     break;
                 }
             }
         }
-        // Jump to index + 1 to show the STATE AFTER the action
-        this.jumpTo(target + 1);
+
+        if (target !== -1) {
+            this.jumpTo(target + 1);
+            return true;
+        }
+        return false;
     }
 
     reset() {

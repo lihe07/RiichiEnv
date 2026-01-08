@@ -36,6 +36,7 @@ export class Viewer {
             flexDirection: 'row',
             width: '100%',
             height: '100vh',
+            maxHeight: '768px', // Force Max Height
             backgroundColor: '#000',
             overflow: 'hidden',
             margin: '0',
@@ -51,13 +52,14 @@ export class Viewer {
             overflow: 'hidden', // Disable scrolling entirely
             backgroundColor: '#000',
             display: 'flex',       // Center child
-            alignItems: 'center',
+            alignItems: 'flex-start', // Top Align
             justifyContent: 'center'
         });
         this.container.appendChild(scrollContainer);
 
         // 1. Board Wrapper (Main Area)
         const boardWrapper = document.createElement('div');
+        boardWrapper.id = this.container.id + '-board-wrapper';
         Object.assign(boardWrapper.style, {
             width: '100%',
             height: '100%', // Full size
@@ -74,16 +76,14 @@ export class Viewer {
             width: '900px',
             height: '900px',
             position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)', // Initial center
-            transformOrigin: 'center center',
+            top: '0',        // Top Align
+            left: '50%',     // Horizontal Center
+            transform: 'translateX(-50%)', // Initial horizontal center only
+            transformOrigin: 'top center', // Scale from Top
             backgroundColor: '#2d5a27', // Board background
             boxShadow: '0 0 20px rgba(0,0,0,0.5)'
         });
-        boardWrapper.appendChild(viewArea);
-
-        // 2. Right Sidebar (Controls) - Fixed Width
+        boardWrapper.appendChild(viewArea);        // 2. Right Sidebar (Controls) - Fixed Width
         const rightSidebar = document.createElement('div');
         Object.assign(rightSidebar.style, {
             width: '80px', // Fixed width for icons
@@ -97,7 +97,9 @@ export class Viewer {
             alignItems: 'center',
             flexShrink: '0',
             zIndex: '500',
-            height: '100%' // Full height
+            height: '100%', // Full height
+            boxSizing: 'border-box', // Ensure padding doesn't overflow height
+            overflow: 'hidden'       // Prevent any scrollbars
         });
         this.container.appendChild(rightSidebar);
 
@@ -122,7 +124,13 @@ export class Viewer {
             return btn;
         };
 
-        // Control Buttons
+        console.log("[Viewer] Initializing GameState with log length:", log.length);
+        this.gameState = new GameState(log);
+        console.log("[Viewer] GameState initialized. Current event index:", this.gameState.current.eventIndex);
+
+        console.log("[Viewer] Initializing Renderer");
+        this.renderer = new Renderer(viewArea);
+
         // Show/Hide Log
         const logBtn = createBtn('📜', () => {
             const display = this.debugPanel.style.display;
@@ -135,6 +143,16 @@ export class Viewer {
             }
         });
         rightSidebar.appendChild(logBtn);
+
+        // Prev Kyoku
+        rightSidebar.appendChild(createBtn('⏮️', () => {
+            if (this.gameState.jumpToPrevKyoku()) this.update();
+        }));
+
+        // Next Kyoku
+        rightSidebar.appendChild(createBtn('⏭️', () => {
+            if (this.gameState.jumpToNextKyoku()) this.update();
+        }));
 
         // Prev Step
         rightSidebar.appendChild(createBtn('◀️', () => {
@@ -168,17 +186,47 @@ export class Viewer {
         });
         rightSidebar.appendChild(autoBtn);
 
-        this.gameState = new GameState(log);
-        this.renderer = new Renderer(viewArea);
+        // Robust Responsive Scaling (Contain Strategy)
+        // With MAX_WIDTH = 768px and MAX_HEIGHT = 768px constraint
+        const MAX_WIDTH = 768;
+        const MAX_HEIGHT = 768;
+
+        const resizeObserver = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const { width, height } = entry.contentRect;
+                if (width === 0 || height === 0) continue;
+
+                const availableWidth = Math.min(width, MAX_WIDTH);
+                const availableHeight = Math.min(height, MAX_HEIGHT);
+
+                // Scale to fit smaller dimension
+                // We want to fit 900x900 into availableWidth x availableHeight
+                const scale = Math.min(availableWidth / 900, availableHeight / 900);
+
+                viewArea.style.transform = `translateX(-50%) scale(${scale})`;
+            }
+        });
+        resizeObserver.observe(boardWrapper);
+
+        // Initial call
+        setTimeout(() => {
+            // Manually trigger resize observer for initial layout
+            const rect = boardWrapper.getBoundingClientRect();
+            resizeObserver.observe(boardWrapper); // Re-observe to trigger
+            resizeObserver.disconnect(); // Disconnect to avoid duplicate triggers
+            resizeObserver.observe(boardWrapper); // Re-observe for future changes
+        }, 0);
 
         // Handle Viewpoint Change from Renderer (Click on Player Info)
         this.renderer.onViewpointChange = (pIdx: number) => {
             if (this.renderer.viewpoint !== pIdx) {
                 this.renderer.viewpoint = pIdx;
+                this.renderer.viewpoint = pIdx;
                 this.update();
             }
         };
 
+        console.log("[Viewer] Calling first update()");
         this.update();
 
         // Handle Center Click -> Show Round Selector
@@ -186,48 +234,20 @@ export class Viewer {
             this.showRoundSelector();
         };
 
-        this.update();
-
-        // Mouse Wheel Navigation
-        window.addEventListener('wheel', (e: WheelEvent) => {
-            // e.preventDefault(); 
-        }, { passive: false });
-
-        // Add listener specifically to boardWrapper for navigation
-        boardWrapper.addEventListener('wheel', (e: WheelEvent) => {
-            // User wants to use wheel for steps. We must prevent default scrolling behavior
-            // to avoid scrolling the page while stepping.
+        // Mouse Wheel Navigation (Turn by Turn)
+        boardWrapper.addEventListener('wheel', (e) => {
             e.preventDefault();
+            // Use current viewpoint for turn navigation
+            const vp = this.renderer.viewpoint;
+
             if (e.deltaY > 0) {
-                if (this.gameState.stepForward()) this.update();
+                // Scroll Down -> Next Turn (Next Tsumo for Viewpoint)
+                if (this.gameState.jumpToNextTurn(vp)) this.update();
             } else {
-                if (this.gameState.stepBackward()) this.update();
+                // Scroll Up -> Prev Turn (Prev Tsumo for Viewpoint)
+                if (this.gameState.jumpToPrevTurn(vp)) this.update();
             }
         }, { passive: false });
-
-        // Robust Responsive Scaling (Contain Strategy)
-        const handleResize = () => {
-            const wrapperRect = boardWrapper.getBoundingClientRect();
-            const availableWidth = wrapperRect.width;
-            const availableHeight = wrapperRect.height;
-            const baseSize = 900;
-
-            // Calculate scale to CONTAIN (Fit Window)
-            const scale = Math.min(availableWidth / baseSize, availableHeight / baseSize);
-
-            // Apply scale + center
-            viewArea.style.transform = `translate(-50%, -50%) scale(${scale})`;
-        };
-
-        if ('ResizeObserver' in window) {
-            // Observe the SCROLL CONTAINER logic width
-            const ro = new ResizeObserver(() => handleResize());
-            ro.observe(scrollContainer);
-        } else {
-            window.addEventListener('resize', handleResize);
-        }
-        // Initial call
-        setTimeout(handleResize, 0);
     }
 
     showRoundSelector() {
@@ -294,13 +314,28 @@ export class Viewer {
 
         overlay.appendChild(content);
 
-        // Append to viewArea so it sits over the board
-        const viewArea = this.container.querySelector('#' + this.container.id + '-board') || this.container;
-        viewArea.appendChild(overlay);
+        // Append to CONTAINER (Not viewArea) to ensure it covers the whole widget
+        // and isn't affected by board scaling/transform
+        this.container.appendChild(overlay);
     }
 
     update() {
-        this.renderer.render(this.gameState.current, this.debugPanel);
+        console.log("[Viewer] update() called");
+        try {
+            console.log("[Viewer] Invoking renderer.render...");
+            this.renderer.render(this.gameState.current, this.debugPanel);
+            console.log("[Viewer] renderer.render completed");
+        } catch (e: any) {
+            console.error("Render Error:", e);
+            if (this.debugPanel) {
+                this.debugPanel.style.display = 'block';
+                this.debugPanel.innerHTML += `<div style="color: red; border-top: 1px solid #555; margin-top: 10px; padding-top: 10px;">
+                    <strong>Render Error:</strong><br>
+                    ${e.message}<br>
+                    <pre>${e.stack}</pre>
+                </div>`;
+            }
+        }
     }
 }
 
