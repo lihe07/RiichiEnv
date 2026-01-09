@@ -1,7 +1,7 @@
 import base64
 import copy
-import functools
 import gzip
+import hashlib
 import json
 import os
 import traceback
@@ -14,13 +14,19 @@ from riichienv import AgariCalculator, Conditions, Meld, MeldType
 from riichienv import convert as cvt
 
 
-@functools.lru_cache(maxsize=1)
-def _get_viewer_js_compressed_base64() -> str:
-    """Returns the Gzipped JS content as a base64 string for efficient notebook injection."""
+def _get_viewer_js_compressed_base64() -> tuple[str, str]:
+    """Returns the Gzipped JS content as a base64 string and its MD5 hash."""
     p_gz = os.path.join(os.path.dirname(__file__), "assets", "viewer.js.gz")
+
+    # helper for processing
+    def process_data(data: bytes) -> tuple[str, str]:
+        b64 = base64.b64encode(data).decode("utf-8")
+        h = hashlib.md5(data).hexdigest()
+        return b64, h
+
     if os.path.exists(p_gz):
         with open(p_gz, "rb") as f:
-            return base64.b64encode(f.read()).decode("utf-8")
+            return process_data(f.read())
 
     # Fallback to compressing on the fly if .gz is missing but .js exists
     p = os.path.join(os.path.dirname(__file__), "assets", "viewer.js")
@@ -28,25 +34,9 @@ def _get_viewer_js_compressed_base64() -> str:
         with open(p, "rb") as f:
             data = f.read()
             compressed = gzip.compress(data)
-            return base64.b64encode(compressed).decode("utf-8")
+            return process_data(compressed)
 
-    return ""
-
-
-@functools.lru_cache(maxsize=1)
-def _get_viewer_js() -> str:
-    # Logic to read the JS file
-    # Check for .gz first
-    p_gz = os.path.join(os.path.dirname(__file__), "assets", "viewer.js.gz")
-    if os.path.exists(p_gz):
-        with gzip.open(p_gz, "rt", encoding="utf-8") as f:
-            return f.read()
-
-    p = os.path.join(os.path.dirname(__file__), "assets", "viewer.js")
-    if not os.path.exists(p):
-        return "console.error('RiichiEnv Viewer JS not found. Please build tools/replay-visualizer first.');"
-    with open(p, encoding="utf-8") as f:
-        return f.read()
+    return "", ""
 
 
 class MetadataInjector:
@@ -366,7 +356,7 @@ class Replay:
 
         unique_id = f"riichienv-viewer-{uuid.uuid4()}"
         log_json = json.dumps(enriched_log)
-        viewer_js_b64 = _get_viewer_js_compressed_base64()
+        viewer_js_b64, viewer_js_hash = _get_viewer_js_compressed_base64()
 
         if not viewer_js_b64:
             # Fallback if no assets found
@@ -380,12 +370,16 @@ class Replay:
         </div>
         <script>
         (function() {{
+            const expectedHash = "{viewer_js_hash}";
+
             const runViewer = (jsCode) => {{
                 try {{
                     if (jsCode) {{
                         const script = document.createElement('script');
                         script.text = jsCode;
                         document.head.appendChild(script);
+                        // Store the hash after loading new code
+                        window.RiichiEnvViewerHash = expectedHash;
                     }}
 
                     const logData = {log_json};
@@ -400,9 +394,11 @@ class Replay:
                 }}
             }};
 
-            if (window.RiichiEnvViewer) {{
+            // Check if global exists AND matches expected hash
+            if (window.RiichiEnvViewer && window.RiichiEnvViewerHash === expectedHash) {{
                 runViewer("");
             }} else {{
+                // Decompress and load New Code
                 const b64Data = "{viewer_js_b64}";
                 const compressed = Uint8Array.from(atob(b64Data), c => c.charCodeAt(0));
 
