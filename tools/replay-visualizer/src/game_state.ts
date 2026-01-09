@@ -48,6 +48,7 @@ const sortHand = (hand: string[]) => {
 export class GameState {
     events: MjaiEvent[];
     cursor: number;
+    kyokus: { index: number, round: number, honba: number, scores: number[] }[];
 
     // Cache state at each step to allow fast jumping
     // For MVP, we might re-compute from nearest checkpoint or just replay from 0.
@@ -60,10 +61,23 @@ export class GameState {
         this.cursor = 0;
         this.current = this.initialState();
 
+        this.kyokus = this.getKyokuCheckpoints();
+
         // Jump to first meaningful state (start_kyoku + 1)
         const firstKyoku = this.events.findIndex(e => e.type === 'start_kyoku');
         if (firstKyoku !== -1) {
             this.jumpTo(firstKyoku + 1);
+        }
+    }
+
+    getState(): BoardState {
+        return this.current;
+    }
+
+    jumpToKyoku(kyokuIndex: number) {
+        if (kyokuIndex >= 0 && kyokuIndex < this.kyokus.length) {
+            // Jump to the event index of the start_kyoku + 1
+            this.jumpTo(this.kyokus[kyokuIndex].index + 1);
         }
     }
 

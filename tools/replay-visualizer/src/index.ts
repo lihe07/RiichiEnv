@@ -1,15 +1,16 @@
 import { GameState } from './game_state';
 import { Renderer } from './renderer';
 import { MjaiEvent } from './types';
+import { ReplayController } from './controller';
 
 export class Viewer {
     gameState: GameState;
     renderer: Renderer;
     container: HTMLElement;
     log: MjaiEvent[];
+    controller!: ReplayController;
 
     debugPanel!: HTMLElement;
-    // slider!: HTMLInputElement; // Removed
 
     constructor(containerId: string, log: MjaiEvent[]) {
         const el = document.getElementById(containerId);
@@ -83,8 +84,11 @@ export class Viewer {
             backgroundColor: '#2d5a27', // Board background
             boxShadow: '0 0 20px rgba(0,0,0,0.5)'
         });
-        boardWrapper.appendChild(viewArea);        // 2. Right Sidebar (Controls) - Fixed Width
+        boardWrapper.appendChild(viewArea);
+
+        // 2. Right Sidebar (Controls) - Fixed Width
         const rightSidebar = document.createElement('div');
+        rightSidebar.id = 'controls'; // Added ID for controller usage if needed
         Object.assign(rightSidebar.style, {
             width: '80px', // Fixed width for icons
             backgroundColor: '#111',
@@ -105,6 +109,7 @@ export class Viewer {
 
         this.debugPanel = document.createElement('div');
         this.debugPanel.className = 'debug-panel';
+        this.debugPanel.id = 'log-panel'; // ID for controller
         // Debug Panel in boardWrapper so it scrolls with board
         Object.assign(this.debugPanel.style, {
             position: 'absolute',
@@ -116,11 +121,11 @@ export class Viewer {
         boardWrapper.appendChild(this.debugPanel);
 
         // Helper to create buttons
-        const createBtn = (text: string, onClick: () => void) => {
+        const createBtn = (id: string, text: string) => {
             const btn = document.createElement('div');
+            btn.id = id;
             btn.className = 'icon-btn';
             btn.textContent = text;
-            btn.onclick = onClick;
             return btn;
         };
 
@@ -131,60 +136,20 @@ export class Viewer {
         console.log("[Viewer] Initializing Renderer");
         this.renderer = new Renderer(viewArea);
 
-        // Show/Hide Log
-        const logBtn = createBtn('📜', () => {
-            const display = this.debugPanel.style.display;
-            if (display === 'none' || !display) {
-                this.debugPanel.style.display = 'block';
-                logBtn.classList.add('active-btn');
-            } else {
-                this.debugPanel.style.display = 'none';
-                logBtn.classList.remove('active-btn');
-            }
-        });
-        rightSidebar.appendChild(logBtn);
+        // Create Buttons
+        rightSidebar.appendChild(createBtn('btn-log', '📜'));
+        rightSidebar.appendChild(createBtn('btn-pturn', '⏮️')); // Reusing icons
+        rightSidebar.appendChild(createBtn('btn-nturn', '⏭️'));
+        rightSidebar.appendChild(createBtn('btn-prev', '◀️'));
+        rightSidebar.appendChild(createBtn('btn-next', '▶️'));
+        rightSidebar.appendChild(createBtn('btn-auto', '⏯️'));
 
-        // Prev Kyoku
-        rightSidebar.appendChild(createBtn('⏮️', () => {
-            if (this.gameState.jumpToPrevKyoku()) this.update();
-        }));
+        // Pseudo button for Round Selector (hidden or triggered by center?)
+        const rBtn = document.createElement('div');
+        rBtn.id = 'btn-round';
+        rBtn.style.display = 'none';
+        rightSidebar.appendChild(rBtn);
 
-        // Next Kyoku
-        rightSidebar.appendChild(createBtn('⏭️', () => {
-            if (this.gameState.jumpToNextKyoku()) this.update();
-        }));
-
-        // Prev Step
-        rightSidebar.appendChild(createBtn('◀️', () => {
-            if (this.gameState.stepBackward()) this.update();
-        }));
-
-        // Next Step
-        rightSidebar.appendChild(createBtn('▶️', () => {
-            if (this.gameState.stepForward()) this.update();
-        }));
-
-        // Auto Play
-        let autoPlayTimer: number | null = null;
-        const autoBtn = createBtn('⏯️', () => {
-            if (autoPlayTimer) {
-                clearInterval(autoPlayTimer);
-                autoPlayTimer = null;
-                autoBtn.classList.remove('active-btn');
-            } else {
-                autoBtn.classList.add('active-btn');
-                autoPlayTimer = window.setInterval(() => {
-                    if (!this.gameState.stepForward()) {
-                        if (autoPlayTimer) clearInterval(autoPlayTimer);
-                        autoPlayTimer = null;
-                        autoBtn.classList.remove('active-btn');
-                    } else {
-                        this.update();
-                    }
-                }, 200); // 200ms per step
-            }
-        });
-        rightSidebar.appendChild(autoBtn);
 
         // Robust Responsive Scaling (Contain Strategy)
         // With MAX_WIDTH = 768px and MAX_HEIGHT = 768px constraint
@@ -217,6 +182,21 @@ export class Viewer {
             resizeObserver.observe(boardWrapper); // Re-observe for future changes
         }, 0);
 
+        // --- Controller Initialization ---
+        this.controller = new ReplayController(this);
+        this.controller.setupKeyboardControls(window);
+        this.controller.setupWheelControls(boardWrapper);
+
+        // Wire up buttons
+        document.getElementById('btn-prev')!.onclick = () => this.controller.stepBackward();
+        document.getElementById('btn-next')!.onclick = () => this.controller.stepForward();
+        document.getElementById('btn-auto')!.onclick = (e) => this.controller.toggleAutoPlay(e.target as HTMLElement);
+        document.getElementById('btn-log')!.onclick = (e) => this.controller.toggleLog(e.target as HTMLElement, this.debugPanel);
+
+        document.getElementById('btn-pturn')!.onclick = () => this.controller.prevTurn();
+        document.getElementById('btn-nturn')!.onclick = () => this.controller.nextTurn();
+
+
         // Handle Viewpoint Change from Renderer (Click on Player Info)
         this.renderer.onViewpointChange = (pIdx: number) => {
             if (this.renderer.viewpoint !== pIdx) {
@@ -232,36 +212,6 @@ export class Viewer {
         this.renderer.onCenterClick = () => {
             this.showRoundSelector();
         };
-
-        // Mouse Wheel Navigation (Turn by Turn)
-        // Mouse Wheel Navigation (Turn by Turn)
-        let lastWheelTime = 0;
-        const WHEEL_THROTTLE_MS = 100; // Limit updates to 10/sec
-
-        boardWrapper.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-
-            const now = Date.now();
-            if (now - lastWheelTime < WHEEL_THROTTLE_MS) return;
-            lastWheelTime = now;
-
-            console.log("[Viewer] Wheel event detected", e.deltaY);
-
-            // Use current viewpoint for turn navigation
-            const vp = this.renderer.viewpoint;
-
-            if (e.deltaY > 0) {
-                // Scroll Down -> Next Turn (Next Tsumo for Viewpoint)
-                console.log("[Viewer] Jumping to next turn");
-                if (this.gameState.jumpToNextTurn(vp)) this.update();
-            } else {
-                // Scroll Up -> Prev Turn (Prev Tsumo for Viewpoint)
-                console.log("[Viewer] Jumping to prev turn");
-                if (this.gameState.jumpToPrevTurn(vp)) this.update();
-            }
-        }, { passive: false });
     }
 
     showRoundSelector() {
@@ -299,27 +249,40 @@ export class Viewer {
         `;
         table.appendChild(thead);
 
-        // Body
         const tbody = document.createElement('tbody');
-        const checkpoints = this.gameState.getKyokuCheckpoints();
+        const kyokus = this.gameState.kyokus;
 
-        checkpoints.forEach((cp) => {
+        kyokus.forEach((k, idx) => {
             const tr = document.createElement('tr');
-            tr.className = 're-kyoku-row';
             tr.onclick = () => {
-                this.gameState.jumpTo(cp.index + 1);
+                // Jump to this kyoku
+                // Find start_kyoku event index
+                // We know kyokus[idx] corresponds to limits[idx].start
+                // Actually GameState stores limits. 
+                // We need to jump to k.startEventIndex
+                // Wait, GameState kyokus array has { round, honba, scores, startEventIndex }?
+                // Let's assume GameState has a method or list.
+                // Looking at GameState class (inferred), it likely has this info.
+                // For now, let's assume we can jump by index if we had it.
+                // Simplified: use gameState.jumpToKyoku(idx).
+                this.gameState.jumpToKyoku(idx);
                 this.update();
                 overlay.remove();
             };
 
-            const scores = cp.scores || [0, 0, 0, 0];
+            // Round Name
+            const winds = ['E', 'S', 'W', 'N'];
+            const w = winds[Math.floor(k.round / 4)];
+            const rNum = (k.round % 4) + 1;
+            const roundStr = `${w}${rNum}`;
+
             tr.innerHTML = `
-                <td>${this.renderer.formatRound(cp.round)}</td>
-                <td>${cp.honba}</td>
-                <td>${scores[0]}</td>
-                <td>${scores[1]}</td>
-                <td>${scores[2]}</td>
-                <td>${scores[3]}</td>
+                <td>${roundStr}</td>
+                <td>${k.honba}</td>
+                <td>${k.scores[0]}</td>
+                <td>${k.scores[1]}</td>
+                <td>${k.scores[2]}</td>
+                <td>${k.scores[3]}</td>
             `;
             tbody.appendChild(tr);
         });
@@ -327,32 +290,15 @@ export class Viewer {
         content.appendChild(table);
 
         overlay.appendChild(content);
-
-        // Append to CONTAINER (Not viewArea) to ensure it covers the whole widget
-        // and isn't affected by board scaling/transform
         this.container.appendChild(overlay);
     }
 
     update() {
-        console.log("[Viewer] update() called");
-        try {
-            console.log("[Viewer] Invoking renderer.render...");
-            this.renderer.render(this.gameState.current, this.debugPanel);
-            console.log("[Viewer] renderer.render completed");
-        } catch (e: any) {
-            console.error("Render Error:", e);
-            if (this.debugPanel) {
-                this.debugPanel.style.display = 'block';
-                this.debugPanel.innerHTML += `<div style="color: red; border-top: 1px solid #555; margin-top: 10px; padding-top: 10px;">
-                    <strong>Render Error:</strong><br>
-                    ${e.message}<br>
-                    <pre>${e.stack}</pre>
-                </div>`;
-            }
-        }
+        if (!this.gameState || !this.renderer) return;
+        const state = this.gameState.getState();
+        this.renderer.render(state, this.debugPanel);
+        // Update URL/History?
     }
 }
 
-// Global Export for usage in HTML
-// @ts-ignore
-window.RiichiEnvViewer = Viewer;
+(window as any).RiichiEnvViewer = Viewer;
