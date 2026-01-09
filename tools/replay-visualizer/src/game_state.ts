@@ -157,7 +157,7 @@ export class GameState {
         let target = -1;
         for (let i = this.cursor; i < this.events.length; i++) {
             const e = this.events[i];
-            if (e.type === 'tsumo' && e.actor === actor) {
+            if ((e.type === 'tsumo' && e.actor === actor) || e.type === 'end_kyoku') {
                 target = i;
                 break;
             }
@@ -177,7 +177,7 @@ export class GameState {
         // Search backwards from cursor - 2 (current event is cursor-1)
         for (let i = this.cursor - 2; i >= 0; i--) {
             const e = this.events[i];
-            if (e.type === 'tsumo' && e.actor === actor) {
+            if ((e.type === 'tsumo' && e.actor === actor) || e.type === 'end_kyoku') {
                 target = i;
                 break;
             }
