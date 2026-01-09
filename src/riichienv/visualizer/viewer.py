@@ -363,7 +363,7 @@ class Replay:
             return HTML(f'<div id="{unique_id}">Error: Viewer assets not found.</div>')
 
         html_content = f"""
-        <div id="{unique_id}" style="width: 100%; min-height: 600px; border: 1px solid #ddd;">
+        <div id="{unique_id}" style="width: 100%; min-height: 600px; border: 1px solid #ddd; box-sizing: border-box;">
              <div style="padding: 20px; text-align: center; font-family: sans-serif; color: #666;">
                 Loading RiichiEnv Replay...
              </div>

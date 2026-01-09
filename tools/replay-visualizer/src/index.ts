@@ -40,7 +40,9 @@ export class Viewer {
             overflow: 'hidden', // Hide overflow from transform
             backgroundColor: '#000',
             margin: '0',
-            padding: '0'
+            padding: '0',
+            border: 'none', // Remove the 1px border added by Python viewer
+            boxSizing: 'border-box' // Ensure padding/borders don't increase width
         });
 
         // 1. Scrollable/Centering Container
