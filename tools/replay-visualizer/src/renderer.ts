@@ -6,19 +6,9 @@ import { RiverRenderer } from './renderers/river_renderer';
 import { HandRenderer } from './renderers/hand_renderer';
 import { InfoRenderer } from './renderers/info_renderer';
 import { CenterRenderer } from './renderers/center_renderer';
+import { ResultRenderer } from './renderers/result_renderer';
 
-const YAKU_MAP: { [key: number]: string } = {
-    1: "Menzen Tsumo", 2: "Riichi", 3: "Chankan", 4: "Rinshan Kaihou", 5: "Haitei Raoyue", 6: "Houtei Raoyui",
-    7: "Haku", 8: "Hatsu", 9: "Chun", 10: "Jikaze (Seat Wind)", 11: "Bakaze (Prevalent Wind)",
-    12: "Tanyao", 13: "Iipeiko", 14: "Pinfu", 15: "Chanta", 16: "Ittsu", 17: "Sanshoku Doujun",
-    18: "Double Riichi", 19: "Sanshoku Doukou", 20: "Sankantsu", 21: "Toitoi", 22: "San Ankou",
-    23: "Shousangen", 24: "Honroutou", 25: "Chiitoitsu", 26: "Junchan", 27: "Honitsu",
-    28: "Ryanpeiko", 29: "Chinitsu", 30: "Ippatsu", 31: "Dora", 32: "Akadora", 33: "Ura Dora",
-    35: "Tenhou", 36: "Chiihou", 37: "Daisangen", 38: "Suuankou", 39: "Tsuu Iisou",
-    40: "Ryuu Iisou", 41: "Chinroutou", 42: "Kokushi Musou", 43: "Shousuushii", 44: "Suukantsu",
-    45: "Chuuren Poutou", 47: "Junsei Chuuren Poutou", 48: "Suuankou Tanki", 49: "Kokushi Musou 13-wait",
-    50: "Daisuushii"
-};
+
 
 export class Renderer {
     container: HTMLElement;
@@ -238,49 +228,29 @@ export class Renderer {
         // End Kyoku Modal
         if (state.lastEvent && state.lastEvent.type === 'end_kyoku' && state.lastEvent.meta && state.lastEvent.meta.results) {
             const results = state.lastEvent.meta.results;
-            const modal = document.createElement('div');
-            modal.className = 're-modal-overlay';
-            Object.assign(modal.style, {
-                maxHeight: '80vh',
-                overflowY: 'auto',
-                width: '80vh'
-            });
+            // Use new ResultRenderer
+            // We assume YAKU_MAP is handled internally or passed if needed, but ResultRenderer imports it.
+            const modal = ResultRenderer.renderModal(results, state);
 
-            let combinedHtml = `<div class="re-modal-title">End Kyoku</div>`;
-            try {
-                results.forEach((res: any, idx: number) => {
-                    const score = res.score;
-                    const actor = res.actor;
-                    const target = res.target;
-                    const isTsumo = (actor === target);
+            // Allow close by clicking overlay (handled by caller? No, ResultRenderer creates overlay).
+            // We need to support 'removing' it from board.
+            // The renderer.ts recreates content every time, so simply appending it works.
+            // But if user wants to close it?
+            // If the event is still 'end_kyoku', re-render will bring it back.
+            // The modal should perhaps NOT be rendered if the user has dismissed it for this specific event instance?
+            // But usually 'end_kyoku' is a state. You move next to start next kyoku.
+            // So closing it might just hide it. 
+            // Let's add simple click-to-hide logic to the overlay in ResultRenderer or here.
+            // ResultRenderer didn't implement creating a close handler that removes it from DOM.
+            // But since board.innerHTML is cleared on render, 'close' just means removing from DOM *until next render*.
+            // Next render happens on next/prev step.
+            // So clicking background to remove() is fine.
+            modal.onclick = (e) => {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            };
 
-                    const yakuListHtml = score.yaku.map((yId: number) => {
-                        const name = YAKU_MAP[yId] || `Yaku ${yId}`;
-                        return `<li>${name}</li>`;
-                    }).join('');
-
-                    combinedHtml += `
-                        <div class="re-result-item" style="margin-bottom: 20px; ${idx > 0 ? 'border-top: 1px solid #555; padding-top: 15px;' : ''}">
-                            <div style="font-weight: bold; margin-bottom: 5px; color: #ffd700; font-size: 1.2em;">
-                                P${actor} ${isTsumo ? 'Tsumo' : 'Ron from P' + target}
-                            </div>
-                            <div class="re-modal-content">
-                                <ul class="re-yaku-list" style="columns: 2;">${yakuListHtml}</ul>
-                                <div style="display:flex; justify-content:space-between; margin-top:10px; font-weight:bold;">
-                                    <span>${score.han} Han</span>
-                                    <span>${score.fu} Fu</span>
-                                </div>
-                            </div>
-                            <div class="re-score-display">
-                                ${score.points} Points
-                            </div>
-                        </div>
-                    `;
-                });
-            } catch (e) {
-                console.error("Error rendering results", e);
-            }
-            modal.innerHTML = combinedHtml;
             board.appendChild(modal);
         }
 

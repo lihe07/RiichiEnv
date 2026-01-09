@@ -61,20 +61,41 @@ export class ReplayController {
     toggleAutoPlay(btn: HTMLElement) {
         this.autoBtn = btn;
         if (this.autoPlayTimer) {
-            clearInterval(this.autoPlayTimer);
-            this.autoPlayTimer = null;
-            btn.classList.remove('active-btn');
+            this.stopAutoPlay();
         } else {
             btn.classList.add('active-btn');
-            this.autoPlayTimer = window.setInterval(() => {
+
+            const loop = () => {
+                if (!this.autoPlayTimer) return; // Stopped
+
                 if (!this.viewer.gameState.stepForward()) {
-                    if (this.autoPlayTimer) clearInterval(this.autoPlayTimer);
-                    this.autoPlayTimer = null;
-                    btn.classList.remove('active-btn');
-                } else {
-                    this.viewer.update();
+                    // End of logs
+                    this.stopAutoPlay();
+                    return;
                 }
-            }, 200);
+                this.viewer.update();
+
+                // Check event type for delay
+                const state = this.viewer.gameState.getState();
+                const evt = state.lastEvent;
+                const delay = (evt && evt.type === 'end_kyoku') ? 3000 : 200;
+
+                this.autoPlayTimer = window.setTimeout(loop, delay);
+            };
+
+            // Use timer ID to indicate active state, though setTimeout returns a different ID each time.
+            // We can treat any non-null number as "active", but we need to store the specific timeout ID to cancel it.
+            this.autoPlayTimer = window.setTimeout(loop, 200);
+        }
+    }
+
+    stopAutoPlay() {
+        if (this.autoPlayTimer) {
+            clearTimeout(this.autoPlayTimer);
+            this.autoPlayTimer = null;
+        }
+        if (this.autoBtn) {
+            this.autoBtn.classList.remove('active-btn');
         }
     }
 

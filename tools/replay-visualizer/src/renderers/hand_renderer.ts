@@ -55,7 +55,7 @@ export class HandRenderer {
         return handArea;
     }
 
-    private static renderMeld(container: HTMLElement, m: { type: string, tiles: string[], from: number }, actor: number) {
+    public static renderMeld(container: HTMLElement, m: { type: string, tiles: string[], from: number }, actor: number) {
         const mGroup = document.createElement('div');
         Object.assign(mGroup.style, {
             display: 'flex',
