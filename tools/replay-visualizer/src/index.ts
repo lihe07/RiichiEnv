@@ -15,9 +15,12 @@ export class Viewer {
     log: MjaiEvent[];
     controller!: ReplayController;
 
+    isFrozen: boolean = false;
+
     debugPanel!: HTMLElement;
 
-    constructor(containerId: string, log: MjaiEvent[], initialStep?: number, perspective?: number) {
+    constructor(containerId: string, log: MjaiEvent[], initialStep?: number, perspective?: number, freeze: boolean = false) {
+        this.isFrozen = freeze;
         const el = document.getElementById(containerId);
         if (!el) throw new Error(`Container #${containerId} not found`);
         this.container = el;
@@ -153,25 +156,46 @@ export class Viewer {
 
         // Create Buttons
         // Create Buttons
-        rightSidebar.appendChild(createBtn('btn-log', ICON_EYE, "Debug"));
-        // Hide Button REMOVED
+        if (!this.isFrozen) {
+            const btnLog = createBtn('btn-log', ICON_EYE, "Debug");
+            btnLog.onclick = () => this.controller.toggleLog(btnLog, this.debugPanel);
+            rightSidebar.appendChild(btnLog);
 
-        rightSidebar.appendChild(createBtn('btn-pturn', ICON_ARROW_LEFT, "Prev Round"));
-        rightSidebar.appendChild(createBtn('btn-nturn', ICON_ARROW_RIGHT, "Next Round"));
-        rightSidebar.appendChild(createBtn('btn-prev', ICON_CHEVRON_LEFT, "Prev Step"));
-        rightSidebar.appendChild(createBtn('btn-next', ICON_CHEVRON_RIGHT, "Next Step"));
-        rightSidebar.appendChild(createBtn('btn-auto', ICON_PLAY_PAUSE, "Play/Pause"));
+            // Hide Button REMOVED
 
-        // Pseudo button for Round Selector (hidden or triggered by center?)
-        const rBtn = document.createElement('div');
-        rBtn.id = 'btn-round';
-        rBtn.style.display = 'none';
-        rightSidebar.appendChild(rBtn);
+            const btnPTurn = createBtn('btn-pturn', ICON_ARROW_LEFT, "Prev Round");
+            btnPTurn.onclick = () => this.controller.prevTurn();
+            rightSidebar.appendChild(btnPTurn);
 
-        // Initialize Controller
-        this.controller = new ReplayController(this);
-        this.controller.setupKeyboardControls(window);
-        this.controller.setupWheelControls(viewArea);
+            const btnNTurn = createBtn('btn-nturn', ICON_ARROW_RIGHT, "Next Round");
+            btnNTurn.onclick = () => this.controller.nextTurn();
+            rightSidebar.appendChild(btnNTurn);
+
+            const btnPrev = createBtn('btn-prev', ICON_CHEVRON_LEFT, "Prev Step");
+            btnPrev.onclick = () => this.controller.stepBackward();
+            rightSidebar.appendChild(btnPrev);
+
+            const btnNext = createBtn('btn-next', ICON_CHEVRON_RIGHT, "Next Step");
+            btnNext.onclick = () => this.controller.stepForward();
+            rightSidebar.appendChild(btnNext);
+
+            const btnAuto = createBtn('btn-auto', ICON_PLAY_PAUSE, "Play/Pause");
+            btnAuto.onclick = () => this.controller.toggleAutoPlay(btnAuto);
+            rightSidebar.appendChild(btnAuto);
+
+            // Pseudo button for Round Selector (hidden or triggered by center?)
+            const rBtn = document.createElement('div');
+            rBtn.id = 'btn-round';
+            rBtn.style.display = 'none';
+            rightSidebar.appendChild(rBtn);
+
+            // Initialize Controller
+            this.controller = new ReplayController(this);
+            this.controller.setupKeyboardControls(window);
+            this.controller.setupWheelControls(viewArea);
+        } else {
+            rightSidebar.style.display = 'none';
+        }
 
         // Initial Seek Logic
         // Priority: initialStep argument > permalink ?eventStep=N
@@ -263,38 +287,29 @@ export class Viewer {
             scaleWrapper.style.height = `${Math.floor(baseH * scale)}px`;
         });
 
-        // Wire up buttons
-        // Note: I changed button creation, but IDs are mostly same. 'btn-hide' is new.
-
-        // Log Button
-        document.getElementById('btn-log')!.onclick = () => this.controller.toggleLog(document.getElementById('btn-log')!, this.debugPanel);
-
-        // Hide Button REMOVED
-
-        // Navigation
-        document.getElementById('btn-prev')!.onclick = () => this.controller.stepBackward();
-        document.getElementById('btn-next')!.onclick = () => this.controller.stepForward();
-        document.getElementById('btn-nturn')!.onclick = () => this.controller.nextTurn();
-        document.getElementById('btn-pturn')!.onclick = () => this.controller.prevTurn();
-        document.getElementById('btn-auto')!.onclick = () => this.controller.toggleAutoPlay(document.getElementById('btn-auto')!);
+        // Wire up buttons - Moved to creation block to handle freeze safely and avoid ID collisions.
 
         // Ensure log panel is initially hidden if desired, or handled by controller.
 
         // Handle Viewpoint Change from Renderer (Click on Player Info)
-        this.renderer.onViewpointChange = (pIdx: number) => {
-            if (this.renderer.viewpoint !== pIdx) {
-                this.renderer.viewpoint = pIdx;
-                this.update();
-            }
-        };
+        if (!this.isFrozen) {
+            this.renderer.onViewpointChange = (pIdx: number) => {
+                if (this.renderer.viewpoint !== pIdx) {
+                    this.renderer.viewpoint = pIdx;
+                    this.update();
+                }
+            };
+        }
 
         console.log("[Viewer] Calling first update()");
         this.update();
 
         // Handle Center Click -> Show Round Selector
-        this.renderer.onCenterClick = () => {
-            this.showRoundSelector();
-        };
+        if (!this.isFrozen) {
+            this.renderer.onCenterClick = () => {
+                this.showRoundSelector();
+            };
+        }
     }
 
     showRoundSelector() {

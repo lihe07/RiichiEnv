@@ -365,20 +365,27 @@ class MetadataInjector:
 
 
 class Replay:
-    def __init__(self, log: list[dict[str, Any]], step: int | None = None, perspective: int | None = None):
+    def __init__(
+        self, log: list[dict[str, Any]], step: int | None = None, perspective: int | None = None, freeze: bool = False
+    ):
         self.log = log
         self.step = step
         self.perspective = perspective
+        self.freeze = freeze
 
     @classmethod
-    def from_jsonl(cls, path: str, step: int | None = None, perspective: int | None = None) -> HTML:
+    def from_jsonl(
+        cls, path: str, step: int | None = None, perspective: int | None = None, freeze: bool = False
+    ) -> HTML:
         with open(path, encoding="utf-8") as f:
             events = [json.loads(line) for line in f]
-        return cls(events, step=step, perspective=perspective).show()
+        return cls(events, step=step, perspective=perspective, freeze=freeze).show()
 
     @classmethod
-    def from_list(cls, events: list[dict[str, Any]], step: int | None = None, perspective: int | None = None) -> HTML:
-        return cls(events, step=step, perspective=perspective).show()
+    def from_list(
+        cls, events: list[dict[str, Any]], step: int | None = None, perspective: int | None = None, freeze: bool = False
+    ) -> HTML:
+        return cls(events, step=step, perspective=perspective, freeze=freeze).show()
 
     def show(self) -> HTML:
         """
@@ -426,8 +433,9 @@ class Replay:
                     const logData = {log_json};
                     const initialStep = {self.step if self.step is not None else "undefined"};
                     const perspective = {self.perspective if self.perspective is not None else "undefined"};
+                    const freeze = {"true" if self.freeze else "false"};
                     if (window.RiichiEnvViewer) {{
-                        new window.RiichiEnvViewer("{unique_id}", logData, initialStep, perspective);
+                        new window.RiichiEnvViewer("{unique_id}", logData, initialStep, perspective, freeze);
                     }} else {{
                         throw new Error("RiichiEnvViewer global not found after injection");
                     }}
