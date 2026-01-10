@@ -401,7 +401,8 @@ export class GameState {
             case 'reach':
             case 'reach_accepted': // Handle distinct event type if present
                 if (e.actor !== undefined) {
-                    if (e.type === 'reach' && e.step === '1') {
+                    // Treat 'reach' without step as step 1 (declaration)
+                    if (e.type === 'reach' && (!e.step || e.step === '1' || e.step === 1)) {
                         this.current.players[e.actor].pendingRiichi = true;
                     }
                     if (e.type === 'reach_accepted' || (e.type === 'reach' && e.step === '2')) {

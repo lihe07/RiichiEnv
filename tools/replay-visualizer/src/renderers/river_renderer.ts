@@ -32,12 +32,15 @@ export class RiverRenderer {
                 // Handle Riichi Rotation
                 let contentContainer = cell;
                 if (d.isRiichi) {
+                    // Make space for rotated tile
+                    cell.style.width = '42px';
+
                     const inner = document.createElement('div');
                     inner.style.width = '100%'; inner.style.height = '100%';
                     inner.className = 'tile-rotated';
                     inner.innerHTML = TileRenderer.getTileHtml(d.tile);
                     cell.appendChild(inner);
-                    contentContainer = inner; // Overlay should maybe follow rotation? Or just cover the square cell?
+                    contentContainer = inner;
                     // User asked for "tile" to be red.
                     // If rotated, the visual tile is rotated. The buffer is square.
                     // Overlaying the square cell is simplest and effective.
