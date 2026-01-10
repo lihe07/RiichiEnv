@@ -108,6 +108,34 @@ export const VIEWER_CSS = `
         animation: tsumo-enter 0.2s ease-out forwards;
     }
 
+    @keyframes dahai-enter {
+        0% {
+            opacity: 1;
+            transform: translate(var(--dx), var(--dy));
+        }
+        100% {
+            transform: translate(0, 0);
+        }
+    }
+
+    .dahai-anim {
+        animation: dahai-enter 0.2s ease-out forwards;
+    }
+
+    @keyframes sort-slide {
+        0% {
+            transform: translateX(var(--sort-dx));
+        }
+        100% {
+            transform: translateX(0);
+        }
+    }
+
+    .sort-anim {
+        /* Delay 200ms, Duration 200ms. Fill mode both/backwards ensures start state is held during delay */
+        animation: sort-slide 0.2s ease-out 0.2s backwards;
+    }
+
     .player-info-box {
         background: rgba(0,0,0,0.6);
         padding: 8px;

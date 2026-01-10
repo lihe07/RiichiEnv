@@ -2,7 +2,7 @@ import { Tile } from '../types';
 import { TileRenderer } from './tile_renderer';
 
 export class RiverRenderer {
-    static renderRiver(discards: Tile[], highlightTiles?: Set<string>): HTMLElement {
+    static renderRiver(discards: Tile[], highlightTiles?: Set<string>, dahaiAnim?: { discardIdx: number, insertIdx: number, tsumogiri: boolean }): HTMLElement {
         // River
         const riverDiv = document.createElement('div');
         riverDiv.className = 'river-container';
@@ -49,6 +49,45 @@ export class RiverRenderer {
                 }
 
                 if (d.isTsumogiri) cell.style.filter = 'brightness(0.7)';
+
+                // Animation for the VERY LAST tile if dahaiAnim is present
+                const idx = discards.indexOf(d);
+                const isLast = (idx === discards.length - 1);
+                if (isLast && dahaiAnim) {
+                    contentContainer.classList.add('dahai-anim');
+                    // Calculate offsets
+                    // Y: Hand is at bottom (flex-end). River is above.
+                    // Rough estimation: Vertical distance from Hand Center to River Row Center is ~200px.
+                    // X: 
+                    // If Tsumogiri: From Tsumo Pos (Right of hand, ~220px from center)
+                    // If Tedashi: From Hand Pos (Index based).
+                    // Hand tile width 40px. Hand center is 0. 13 tiles.
+                    // Index 0 is -6.5 * 40 = -260px.
+                    // Index 12 is +260px.
+                    // Discard index k -> (k - 6) * 40.
+                    // River Tile Pos:
+                    // Row 0, 6 tiles centered? No, river row is left aligned?
+                    // River Container is width 214px.
+                    // Actually we need relative X from River Tile to Hand Tile.
+                    // This is hard to get precise without bounding box.
+                    // Approximation should be enough for visual flow.
+
+                    let dx = 0;
+                    if (dahaiAnim.tsumogiri) {
+                        dx = 200; // From right side
+                    } else {
+                        // From discard index
+                        // River row width ~214. Tile idx in river (0..5).
+                        // River tile X approx: (idx % 6) * 36 - 100.
+                        // Hand tile X: (discardIdx - 6) * 40.
+                        // Delta X = HandX - RiverX.
+                        const riverX = (idx % 6) * 36 - 107; // Approx center relative
+                        const handX = (dahaiAnim.discardIdx - 6) * 40;
+                        dx = handX - riverX;
+                    }
+                    contentContainer.style.setProperty('--dx', `${dx}px`);
+                    contentContainer.style.setProperty('--dy', `150px`); // From below
+                }
 
                 // Highlight Logic
                 if (highlightTiles) {

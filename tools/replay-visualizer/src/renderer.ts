@@ -214,7 +214,11 @@ export class Renderer {
             });
 
             // Use independent RiverRenderer
-            const riverDiv = RiverRenderer.renderRiver(p.discards, activeWaits);
+            let riverDAnim = undefined;
+            if (state.dahaiAnim && state.currentActor === i) {
+                riverDAnim = state.dahaiAnim;
+            }
+            const riverDiv = RiverRenderer.renderRiver(p.discards, activeWaits, riverDAnim);
             riverRow.appendChild(riverDiv);
             pDiv.appendChild(riverRow);
 
@@ -239,7 +243,14 @@ export class Renderer {
             }
 
             const playerState = state.players[i];
-            const hand = HandRenderer.renderHand(playerState.hand, playerState.melds, i, activeWaits, hasDraw);
+
+            // Only pass dahaiAnim if it's THIS player's action
+            let dAnim = undefined;
+            if (state.dahaiAnim && state.currentActor === i) {
+                dAnim = state.dahaiAnim;
+            }
+
+            const hand = HandRenderer.renderHand(playerState.hand, playerState.melds, i, activeWaits, hasDraw, dAnim);
 
             // HIDE HANDS LOGIC REMOVED
 

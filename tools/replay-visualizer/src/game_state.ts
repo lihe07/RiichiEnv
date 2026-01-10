@@ -260,6 +260,9 @@ export class GameState {
     }
 
     processEvent(e: MjaiEvent) {
+        // Clear animation state
+        this.current.dahaiAnim = undefined;
+
         switch (e.type) {
             case 'start_game':
                 break;
@@ -279,16 +282,15 @@ export class GameState {
                     p.waits = undefined;
                     // Assign wind based on oya
                     p.wind = (i - e.oya + 4) % 4;
+                    p.lastDrawnTile = undefined;
                 });
                 break;
 
             case 'tsumo':
                 if (e.actor !== undefined && e.pai) {
                     this.current.players[e.actor].hand.push(e.pai);
-                    // Do NOT sort hand here. 
-                    // User wants the drawn tile to be visually separated on the right.
-                    // Renderer separates the LAST tile. So we just push it.
-                    // this.current.players[e.actor].hand = sortHand(this.current.players[e.actor].hand);
+                    this.current.players[e.actor].lastDrawnTile = e.pai;
+                    // Do NOT sort hand here in renderer
                     this.current.currentActor = e.actor;
                 }
                 break;
@@ -296,11 +298,29 @@ export class GameState {
             case 'dahai':
                 if (e.actor !== undefined && e.pai) {
                     const p = this.current.players[e.actor];
-                    const idx = p.hand.indexOf(e.pai);
-                    if (idx >= 0) {
-                        p.hand.splice(idx, 1);
+                    const discardIdx = p.hand.indexOf(e.pai);
+                    // Note: discardIdx might be -1 if not found (shouldn't happen in valid)
+
+                    if (discardIdx >= 0) {
+                        p.hand.splice(discardIdx, 1);
                     }
                     p.hand = sortHand(p.hand);
+
+                    // Find insert index of last drawn tile if te-dashi
+                    let insertIdx = -1;
+                    if (!e.tsumogiri && p.lastDrawnTile) {
+                        // Find where the last drawn tile ended up after sort
+                        // Note: If multiple same tiles, just pick first or last?
+                        // Visually picking one is fine.
+                        insertIdx = p.hand.indexOf(p.lastDrawnTile);
+                    }
+
+                    this.current.dahaiAnim = {
+                        discardIdx: discardIdx,
+                        insertIdx: insertIdx,
+                        tsumogiri: !!e.tsumogiri,
+                        drawnTile: p.lastDrawnTile
+                    };
 
                     // Riichi Logic
                     let isRiichi = false;

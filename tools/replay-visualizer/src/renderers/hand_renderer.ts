@@ -1,7 +1,7 @@
 import { TileRenderer } from './tile_renderer';
 
 export class HandRenderer {
-    static renderHand(hand: string[], melds: any[], playerIndex: number, highlightTiles?: Set<string>, hasDraw?: boolean): HTMLElement {
+    static renderHand(hand: string[], melds: any[], playerIndex: number, highlightTiles?: Set<string>, hasDraw?: boolean, dahaiAnim?: { insertIdx: number, tsumogiri: boolean }): HTMLElement {
         // Hand & Melds Area
         const handArea = document.createElement('div');
         Object.assign(handArea.style, {
@@ -40,6 +40,22 @@ export class HandRenderer {
             if (isSeparated && idx === hand.length - 1) {
                 tDiv.style.marginLeft = '12px';
                 tDiv.classList.add('tsumo-anim');
+            }
+
+            // Sort Animation (for Te-dashi)
+            if (dahaiAnim && !dahaiAnim.tsumogiri && idx === dahaiAnim.insertIdx) {
+                tDiv.classList.add('sort-anim');
+                // Calculate distance from Tsumo slot (theoretical idx 13 + gap)
+                // Source X: 13 * 40 + 12
+                // Target X: idx * 40
+                const sortDx = (hand.length - idx) * 40 + 12;
+                // Wait, hand.length is usually 13 (after discard). So source is index 13?
+                // Yes, after discard, hand has 13 tiles. 
+                // The tile moved FROM the 14th slot (index 13, plus margin).
+                // So (13 - idx) * 40 + 12 should be correct.
+
+                // Use variable
+                tDiv.style.setProperty('--sort-dx', `${sortDx}px`);
             }
 
             // Check Highlight

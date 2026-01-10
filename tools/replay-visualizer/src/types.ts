@@ -32,6 +32,7 @@ export interface PlayerState {
     pendingRiichi?: boolean; // Waiting for discard to mark as riichi
     wind: number;
     waits?: string[];
+    lastDrawnTile?: string;
 }
 
 export interface BoardState {
@@ -45,4 +46,10 @@ export interface BoardState {
     lastEvent?: MjaiEvent;
     eventIndex: number;
     totalEvents: number;
+    dahaiAnim?: {
+        discardIdx: number;
+        insertIdx: number;
+        tsumogiri: boolean;
+        drawnTile?: string;
+    };
 }
