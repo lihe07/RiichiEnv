@@ -10,7 +10,7 @@ from typing import Any
 
 from IPython.display import HTML
 
-from riichienv import AgariCalculator, Conditions, Meld, MeldType
+from riichienv import AgariCalculator, Conditions, Meld, MeldType, Wind
 from riichienv import convert as cvt
 
 
@@ -52,6 +52,7 @@ class MetadataInjector:
         self.tile_counts = {}  # To track unique IDs for string tiles
         self.kyoku_results = []
         self.last_tile: str | None = None
+        self.last_tid: int | None = None
 
         # State for Conditions
         self.ippatsu_eligible = [False] * 4
@@ -61,6 +62,8 @@ class MetadataInjector:
         self.is_first_round_of_kyoku = True
         self.any_melds_in_kyoku = False
         self.turn_count = 0
+        self.kyoku_num = 0
+        self.honba = 0
 
     def _get_tid(self, tile_str: str) -> int:
         """Get a unique 136-ID for a tile string to maintain valid state."""
@@ -111,11 +114,15 @@ class MetadataInjector:
                 self.dora_markers = [self._get_tid(ev["dora_marker"])]
                 self.round_wind = self.bakaze_map.get(ev.get("bakaze", "E"), 0)
                 self.oya = ev.get("oya", 0)
+                self.kyoku_num = ev.get("kyoku", 1)  # Default to 1
+                self.honba = ev.get("honba", 0)
                 self.riichi_declared = [False] * 4
                 self.hands = {0: [], 1: [], 2: [], 3: []}
                 self.melds = {0: [], 1: [], 2: [], 3: []}
                 self.kyoku_results = []
+                self.kyoku_results = []
                 self.ippatsu_eligible = [False] * 4
+                self.just_reached = [False] * 4  # Track declaration discard
                 self.is_rinshan = False
                 self.is_chankan = False
                 self.is_haitei = False
@@ -132,7 +139,6 @@ class MetadataInjector:
                 self.last_tile = ev.get("pai")
                 tile = self._get_tid(ev["pai"])
                 self.hands[actor].append(tile)
-                self.hands[actor].sort()
                 self.is_rinshan = False  # Reset unless set by Kan
                 self.is_chankan = False
 
@@ -143,6 +149,7 @@ class MetadataInjector:
 
                 # Identify which tile was discarded
                 tid = self._get_matching_tid(self.hands[actor], pai)
+                self.last_tid = tid  # Track the exact TID for calls
                 if tid in self.hands[actor]:
                     self.hands[actor].remove(tid)
 
@@ -161,27 +168,46 @@ class MetadataInjector:
                     self.is_first_round_of_kyoku = False
 
                 # Any discard clears ippatsu if it's not the riichi-er's first discard
-                for pid in range(4):
-                    if pid != actor and self.ippatsu_eligible[pid]:
-                        # This logic is slightly complex: ippatsu is until YOUR next discard or anyone else's call
-                        pass
+                if self.just_reached[actor]:
+                    self.just_reached[actor] = False
+                else:
+                    self.ippatsu_eligible[actor] = False
 
                 self.turn_count += 1
+
+            elif etype == "reach":
+                assert actor is not None
+                # Set Riichi declared flag immediately on announcement
+                self.riichi_declared[actor] = True
+                self.ippatsu_eligible[actor] = True
+                self.just_reached[actor] = True
 
             elif etype in ["pon", "chi", "daiminkan"]:
                 assert actor is not None
                 # Remove consumed tiles from hand
                 consumed = ev["consumed"]  # list of strings
+                consumed_tids = []
+
                 for c_str in consumed:
                     tid = self._get_matching_tid(self.hands[actor], c_str)
+
                     if tid in self.hands[actor]:
                         self.hands[actor].remove(tid)
+                        consumed_tids.append(tid)
+                    else:
+                        # Fallback if not found (should generally not happen in valid log)
+                        consumed_tids.append(self._get_tid(c_str))
 
                 # Create Meld object
                 stolen_str = ev["pai"]
-                stolen_tid = self._get_tid(stolen_str)
+                stolen_tid = 0
+                if self.last_tid is not None:
+                    stolen_tid = self.last_tid
+                else:
+                    # Fallback if logic mismatch (should not happen in valid log)
+                    stolen_tid = self._get_tid(stolen_str)
 
-                m_tiles = sorted([self._get_tid(c) for c in consumed] + [stolen_tid])
+                m_tiles = sorted(consumed_tids + [stolen_tid])
 
                 m_type = MeldType.Peng
                 if etype == "chi":
@@ -222,11 +248,16 @@ class MetadataInjector:
             elif etype == "ankan":
                 assert actor is not None
                 consumed = ev["consumed"]
+                m_tiles = []
                 for c_str in consumed:
                     tid = self._get_matching_tid(self.hands[actor], c_str)
                     if tid in self.hands[actor]:
                         self.hands[actor].remove(tid)
-                m_tiles = sorted([self._get_tid(c) for c in consumed])
+                        m_tiles.append(tid)
+                    else:
+                        m_tiles.append(self._get_tid(c_str))
+
+                m_tiles.sort()
                 self.melds[actor].append(Meld(MeldType.Angang, m_tiles, False))
                 self.is_rinshan = True
                 self.ippatsu_eligible = [False] * 4
@@ -241,38 +272,47 @@ class MetadataInjector:
                 if actor is None or target is None:
                     continue
 
+                is_tsumo = actor == target
                 pai_str = ev.get("pai") or self.last_tile
                 pai_tid = 0
 
-                if pai_str:
-                    pai_tid = self._get_tid(pai_str)
-                # Fallback if both ev["pai"] and last_tile are missing (Tsumo case)
-                elif actor == target:
+                if is_tsumo:
                     # Tsumo: The winning tile should be the last one in hand
                     if self.hands[actor]:
                         pai_tid = self.hands[actor][-1]
-                    else:
-                        continue
-                else:
-                    # Ron: Cannot infer win tile without global State/River tracking
-                    continue
+                    elif pai_str:
+                        pai_tid = self._get_tid(pai_str)
+                # Ron: Use last_tid from dahai if available
+                elif self.last_tid is not None:
+                    pai_tid = self.last_tid
+                elif pai_str:
+                    pai_tid = self._get_tid(pai_str)
 
-                is_tsumo = actor == target
+                # Double Riichi check
+                is_double_riichi = False
+                if self.riichi_declared[actor] and self.is_first_round_of_kyoku and not self.any_melds_in_kyoku:
+                    is_double_riichi = True
 
-                calc = AgariCalculator(self.hands[actor], self.melds[actor])
-
-                # Determine if it's Ippatsu
-                # In MJAI, if we are at 'hora' after 'dahai' or 'tsumo', we check ippatsu_eligible
-                # But we need to clear ippatsu_eligible[actor] AFTER their next turn.
+                # Helpers for Wind conversion
+                def get_wind(idx: int) -> Wind:
+                    idx = idx % 4
+                    if idx == 0:
+                        return Wind.East
+                    if idx == 1:
+                        return Wind.South
+                    if idx == 2:
+                        return Wind.West
+                    return Wind.North
 
                 cond = Conditions(
                     tsumo=is_tsumo,
                     riichi=self.riichi_declared[actor],
+                    double_riichi=is_double_riichi,
                     ippatsu=self.ippatsu_eligible[actor],
                     rinshan=self.is_rinshan if is_tsumo else False,
                     chankan=self.is_chankan if not is_tsumo else False,
-                    player_wind=(actor - self.oya + 4) % 4,
-                    round_wind=self.round_wind,
+                    player_wind=get_wind(actor - self.oya),
+                    round_wind=get_wind(self.round_wind),
                     # haitei/houtei based on wall (if we had wall count)
                     # double_riichi if first round and no calls
                 )
@@ -282,6 +322,7 @@ class MetadataInjector:
                 if "ura_markers" in ev:
                     ura_in = [self._get_tid(u) for u in ev["ura_markers"]]
 
+                calc = AgariCalculator(self.hands[actor], self.melds[actor])
                 res = calc.calc(pai_tid, dora_indicators=self.dora_markers, conditions=cond, ura_indicators=ura_in)
 
                 if res.agari:
@@ -306,38 +347,45 @@ class MetadataInjector:
         return self.events
 
     def _calculate_waits(self, pid: int) -> list[str]:
-        """Iterate all 34 tiles to find agari candidates."""
+        """Use AgariCalculator API to find waits."""
         hand = self.hands[pid]
         melds = self.melds[pid]
-        waits = []
 
-        # Check all 34 tiles
-        for i in range(34):
-            tid = i * 4
-            # We use a dummy condition to check shape validity
-            calc = AgariCalculator(hand, melds)
-            # Use minimal conditions
-            cond = Conditions()
-            res = calc.calc(tid, conditions=cond)
-            if res.agari:
-                waits.append(cvt.tid_to_mjai(tid))
+        calc = AgariCalculator(hand, melds)
+
+        # get_waits returns list of u32 (0-33)
+        wait_tids = calc.get_waits()
+
+        waits = []
+        for t34 in wait_tids:
+            # Convert 34-tile ID to MJAI string (use *4 to get base 136 ID)
+            waits.append(cvt.tid_to_mjai(t34 * 4))
 
         return waits
 
 
 class Replay:
-    def __init__(self, log: list[dict[str, Any]]):
+    def __init__(
+        self, log: list[dict[str, Any]], step: int | None = None, perspective: int | None = None, freeze: bool = False
+    ):
         self.log = log
+        self.step = step
+        self.perspective = perspective
+        self.freeze = freeze
 
     @classmethod
-    def from_jsonl(cls, path: str) -> HTML:
+    def from_jsonl(
+        cls, path: str, step: int | None = None, perspective: int | None = None, freeze: bool = False
+    ) -> HTML:
         with open(path, encoding="utf-8") as f:
             events = [json.loads(line) for line in f]
-        return cls(events).show()
+        return cls(events, step=step, perspective=perspective, freeze=freeze).show()
 
     @classmethod
-    def from_list(cls, events: list[dict[str, Any]]) -> HTML:
-        return cls(events).show()
+    def from_list(
+        cls, events: list[dict[str, Any]], step: int | None = None, perspective: int | None = None, freeze: bool = False
+    ) -> HTML:
+        return cls(events, step=step, perspective=perspective, freeze=freeze).show()
 
     def show(self) -> HTML:
         """
@@ -363,7 +411,7 @@ class Replay:
             return HTML(f'<div id="{unique_id}">Error: Viewer assets not found.</div>')
 
         html_content = f"""
-        <div id="{unique_id}" style="width: 100%; min-height: 600px; border: 1px solid #ddd;">
+        <div id="{unique_id}" style="width: 100%; min-height: 600px; border: 1px solid #ddd; box-sizing: border-box;">
              <div style="padding: 20px; text-align: center; font-family: sans-serif; color: #666;">
                 Loading RiichiEnv Replay...
              </div>
@@ -383,8 +431,11 @@ class Replay:
                     }}
 
                     const logData = {log_json};
+                    const initialStep = {self.step if self.step is not None else "undefined"};
+                    const perspective = {self.perspective if self.perspective is not None else "undefined"};
+                    const freeze = {"true" if self.freeze else "false"};
                     if (window.RiichiEnvViewer) {{
-                        new window.RiichiEnvViewer("{unique_id}", logData);
+                        new window.RiichiEnvViewer("{unique_id}", logData, initialStep, perspective, freeze);
                     }} else {{
                         throw new Error("RiichiEnvViewer global not found after injection");
                     }}
@@ -425,3 +476,17 @@ def show_replay(log: list[dict[str, Any]]) -> HTML:
     Start using Replay.from_list(log).show() instead.
     """
     return Replay.from_list(log)
+
+
+def main() -> None:
+    with open("example_before_injection.jsonl") as f:
+        log = [json.loads(line) for line in f]
+    injector = MetadataInjector(log)
+    enriched_log = injector.process()
+    with open("example_after_injection.jsonl", "w") as f:
+        for line in enriched_log:
+            f.write(json.dumps(line) + "\n")
+
+
+if __name__ == "__main__":
+    main()

@@ -48,6 +48,7 @@ const sortHand = (hand: string[]) => {
 export class GameState {
     events: MjaiEvent[];
     cursor: number;
+    kyokus: { index: number, round: number, honba: number, scores: number[] }[];
 
     // Cache state at each step to allow fast jumping
     // For MVP, we might re-compute from nearest checkpoint or just replay from 0.
@@ -60,10 +61,23 @@ export class GameState {
         this.cursor = 0;
         this.current = this.initialState();
 
+        this.kyokus = this.getKyokuCheckpoints();
+
         // Jump to first meaningful state (start_kyoku + 1)
         const firstKyoku = this.events.findIndex(e => e.type === 'start_kyoku');
         if (firstKyoku !== -1) {
             this.jumpTo(firstKyoku + 1);
+        }
+    }
+
+    getState(): BoardState {
+        return this.current;
+    }
+
+    jumpToKyoku(kyokuIndex: number) {
+        if (kyokuIndex >= 0 && kyokuIndex < this.kyokus.length) {
+            // Jump to the event index of the start_kyoku + 1
+            this.jumpTo(this.kyokus[kyokuIndex].index + 1);
         }
     }
 
@@ -143,7 +157,7 @@ export class GameState {
         let target = -1;
         for (let i = this.cursor; i < this.events.length; i++) {
             const e = this.events[i];
-            if (e.type === 'tsumo' && e.actor === actor) {
+            if ((e.type === 'tsumo' && e.actor === actor) || e.type === 'end_kyoku') {
                 target = i;
                 break;
             }
@@ -163,7 +177,7 @@ export class GameState {
         // Search backwards from cursor - 2 (current event is cursor-1)
         for (let i = this.cursor - 2; i >= 0; i--) {
             const e = this.events[i];
-            if (e.type === 'tsumo' && e.actor === actor) {
+            if ((e.type === 'tsumo' && e.actor === actor) || e.type === 'end_kyoku') {
                 target = i;
                 break;
             }
@@ -246,6 +260,9 @@ export class GameState {
     }
 
     processEvent(e: MjaiEvent) {
+        // Clear animation state
+        this.current.dahaiAnim = undefined;
+
         switch (e.type) {
             case 'start_game':
                 break;
@@ -265,16 +282,15 @@ export class GameState {
                     p.waits = undefined;
                     // Assign wind based on oya
                     p.wind = (i - e.oya + 4) % 4;
+                    p.lastDrawnTile = undefined;
                 });
                 break;
 
             case 'tsumo':
                 if (e.actor !== undefined && e.pai) {
                     this.current.players[e.actor].hand.push(e.pai);
-                    // Do NOT sort hand here. 
-                    // User wants the drawn tile to be visually separated on the right.
-                    // Renderer separates the LAST tile. So we just push it.
-                    // this.current.players[e.actor].hand = sortHand(this.current.players[e.actor].hand);
+                    this.current.players[e.actor].lastDrawnTile = e.pai;
+                    // Do NOT sort hand here in renderer
                     this.current.currentActor = e.actor;
                 }
                 break;
@@ -282,11 +298,29 @@ export class GameState {
             case 'dahai':
                 if (e.actor !== undefined && e.pai) {
                     const p = this.current.players[e.actor];
-                    const idx = p.hand.indexOf(e.pai);
-                    if (idx >= 0) {
-                        p.hand.splice(idx, 1);
+                    const discardIdx = p.hand.indexOf(e.pai);
+                    // Note: discardIdx might be -1 if not found (shouldn't happen in valid)
+
+                    if (discardIdx >= 0) {
+                        p.hand.splice(discardIdx, 1);
                     }
                     p.hand = sortHand(p.hand);
+
+                    // Find insert index of last drawn tile if te-dashi
+                    let insertIdx = -1;
+                    if (!e.tsumogiri && p.lastDrawnTile) {
+                        // Find where the last drawn tile ended up after sort
+                        // Note: If multiple same tiles, just pick first or last?
+                        // Visually picking one is fine.
+                        insertIdx = p.hand.indexOf(p.lastDrawnTile);
+                    }
+
+                    this.current.dahaiAnim = {
+                        discardIdx: discardIdx,
+                        insertIdx: insertIdx,
+                        tsumogiri: !!e.tsumogiri,
+                        drawnTile: p.lastDrawnTile
+                    };
 
                     // Riichi Logic
                     let isRiichi = false;
@@ -387,7 +421,8 @@ export class GameState {
             case 'reach':
             case 'reach_accepted': // Handle distinct event type if present
                 if (e.actor !== undefined) {
-                    if (e.type === 'reach' && e.step === '1') {
+                    // Treat 'reach' without step as step 1 (declaration)
+                    if (e.type === 'reach' && (!e.step || e.step === '1' || e.step === 1)) {
                         this.current.players[e.actor].pendingRiichi = true;
                     }
                     if (e.type === 'reach_accepted' || (e.type === 'reach' && e.step === '2')) {
@@ -409,6 +444,83 @@ export class GameState {
             case 'ryukyoku':
                 if (e.scores) {
                     this.current.players.forEach((p, i) => p.score = e.scores[i]);
+                }
+                break;
+
+            case 'end_kyoku':
+                // Enrich results with data from preceding hora events
+                if (e.meta && e.meta.results) {
+                    e.meta.results.forEach((res: any) => {
+                        // 0. Check if pai is already in the result object (non-standard but possible)
+                        if (res.pai) {
+                            res.winningTile = res.pai;
+                        }
+
+                        // 1. Search backwards for matching hora event
+                        // console.log(`[ResultEnricher] Processing result for actor ${res.actor} at cursor ${this.cursor}`);
+
+                        let found = false;
+                        for (let i = this.cursor - 1; i >= 0; i--) {
+                            const prev = this.events[i];
+                            if (prev.type === 'start_kyoku') {
+                                // console.log(`[ResultEnricher] Hit start_kyoku at ${i}, stopping search.`);
+                                break;
+                            }
+
+                            if (prev.type === 'hora') {
+                                // console.log(`[ResultEnricher] Found hora at ${i}: actor=${prev.actor}, pai=${prev.pai}`);
+                                // Use loose equality for actor to handle string/number mismatch
+                                if (prev.actor == res.actor) {
+                                    if (prev.pai) {
+                                        res.winningTile = prev.pai;
+                                        res.uraMarkers = prev.ura_markers;
+                                        found = true;
+                                        break;
+                                    } else {
+                                        // console.warn(`[ResultEnricher] Found hora for actor ${res.actor} but 'pai' is missing! Inferring...`, prev);
+                                        res.uraMarkers = prev.ura_markers; // Still capture ura markers if present
+
+                                        // Inference Logic:
+                                        // If Ron (target != actor), winning tile is last discard of target.
+                                        // If Tsumo (target == actor), winning tile is last tsumo of actor.
+
+                                        const target = prev.target;
+                                        const actor = prev.actor;
+
+                                        // Search backwards from the hora event (index i)
+                                        for (let j = i - 1; j >= 0; j--) {
+                                            const e2 = this.events[j];
+                                            if (e2.type === 'start_kyoku') break;
+
+                                            if (target !== undefined && target !== actor) {
+                                                // Ron: Look for dahai from target
+                                                if (e2.type === 'dahai' && e2.actor == target) {
+                                                    res.winningTile = e2.pai;
+                                                    found = true;
+                                                    // console.log(`[ResultEnricher] Inferred winning tile from dahai: ${e2.pai}`);
+                                                    break;
+                                                }
+                                            } else {
+                                                // Tsumo: Look for tsumo from actor
+                                                if (e2.type === 'tsumo' && e2.actor == actor) {
+                                                    res.winningTile = e2.pai;
+                                                    found = true;
+                                                    // console.log(`[ResultEnricher] Inferred winning tile from tsumo: ${e2.pai}`);
+                                                    break;
+                                                }
+                                            }
+                                        }
+
+                                        if (found) break; // Break outer loop if found
+                                    }
+                                }
+                            }
+                        }
+
+                        if (!found && !res.winningTile) {
+                            console.warn(`[ResultEnricher] Failed to find winning tile for actor ${res.actor}`);
+                        }
+                    });
                 }
                 break;
         }
