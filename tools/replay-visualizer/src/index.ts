@@ -17,7 +17,7 @@ export class Viewer {
 
     debugPanel!: HTMLElement;
 
-    constructor(containerId: string, log: MjaiEvent[], initialStep?: number) {
+    constructor(containerId: string, log: MjaiEvent[], initialStep?: number, perspective?: number) {
         const el = document.getElementById(containerId);
         if (!el) throw new Error(`Container #${containerId} not found`);
         this.container = el;
@@ -145,6 +145,11 @@ export class Viewer {
 
         console.log("[Viewer] Initializing Renderer");
         this.renderer = new Renderer(viewArea);
+
+        // Create Buttons
+        if (typeof perspective === 'number') {
+            this.renderer.viewpoint = perspective;
+        }
 
         // Create Buttons
         // Create Buttons
