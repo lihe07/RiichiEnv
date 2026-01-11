@@ -35,74 +35,71 @@ export class CenterRenderer {
             if (onCenterClick) onCenterClick();
         };
 
-        // Render Wind Labels
+        // Helper to create sprite icon
+        const makeImg = (key: string, size: number = 26) => {
+            const asset = CHAR_MAP[key];
+            if (!asset) return document.createElement('div');
+
+            // Use 36 (base font size) as reference for 100% scale
+            const scale = size / 36.0;
+            // Use full asset width to ensure no clipping, margins are minimal (1px) now
+            // Round UP + 1px safety buffer to ensure we don't cut off sub-pixels in layout
+            const scaledW = Math.ceil(asset.w * scale) + 1;
+
+            const d = document.createElement('div');
+            Object.assign(d.style, {
+                width: `${asset.w + 8}px`,
+                height: `${asset.h}px`,
+                backgroundImage: `url(${CHAR_SPRITE_BASE64})`,
+                backgroundPosition: `-${asset.x}px -${asset.y}px`,
+                backgroundRepeat: 'no-repeat',
+                backgroundColor: 'transparent',
+                transformOrigin: 'center center'
+            });
+            d.style.transform = `scale(${scale})`;
+
+            // Wrapper fits the scaled content width (tight packing)
+            const w = document.createElement('div');
+            Object.assign(w.style, {
+                width: `${scaledW + 8}px`,
+                height: `${size}px`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'visible',
+                marginRight: '-8px'
+            });
+            w.appendChild(d);
+            return w;
+        };
+
+        // 1. Render Wind Labels (Corners)
         const windMap = ['東_red', '南', '西', '北']; // Keys in CHAR_MAP
         state.players.forEach((p: any, i: number) => {
             const relPos = (i - viewpoint + 4) % 4; // 0: Bottom, 1: Right, 2: Top, 3: Left
             const windIdx = p.wind; // 0: East, 1: South, ...
             if (windIdx < 0 || windIdx > 3) return;
 
-            const assetKey = windMap[windIdx];
-            const asset = CHAR_MAP[assetKey];
+            const key = windMap[windIdx];
+            const asset = CHAR_MAP[key];
             if (!asset) return;
 
             const icon = document.createElement('div');
             Object.assign(icon.style, {
                 position: 'absolute',
-                width: '30px',
-                height: '30px',
+                width: `${asset.w}px`,
+                height: `${asset.h}px`,
                 pointerEvents: 'none',
                 backgroundImage: `url(${CHAR_SPRITE_BASE64})`,
                 backgroundPosition: `-${asset.x}px -${asset.y}px`,
                 backgroundRepeat: 'no-repeat',
-                // Scale the sprite chunk: define sprite scale relative to rendered size
-                // However, our sprite is fontSize=36, rendered in 30x30.
-                // We don't have explicit sprite-sheet scaling here without background-size.
-                // If background-size is not set, it uses original image size.
-                // We should probably set background-size appropriate to scale down?
-                // Or rely on the fact that we can't easily scale sprites non-uniformly without background-size covering whole sprite.
-                // Actually, if we use just background-position, we display the image at 1:1 scale of the png.
-                // Generated font size 36 is likely around 36px high.
-                // If we want 30px container, we can let it clip or scale.
-                // To scale correctly: custom background-size logic is tricky with sprites unless uniform.
-                // Let's assume we want to just display it centered or as is. 36px might be slightly large for 30px box.
-                // Let's use 'transform: scale()' on the div if needed, or rely on visual fit.
-                // Let's try simple rendering first. If too big, we scale the div.
+                transformOrigin: 'center center'
             });
-            // To make the sprite glyph fit 30x30:
-            // Since we don't know the exact total width of sprite easily here (unless we export it), 
-            // scaling background-size is hard.
-            // Better to scale the CONTAINER DIV using transform if it's too big.
-            // Or just ensure the generated sprite size (36px font) roughly fits or is scaled down by the user's browser default? No.
-
-            // Wait, we can scale the element itself.
-            // icon.style.zoom = ...? No, deprecated.
-            // transform: scale(30/36)?
-
-            // Let's stick to 1:1 for now or adjust logic.
-            // Actually, `background-size` requires total width/height.
-            // Let's assume we render at 1:1 for now (which is 36px font ~> approx 36px+).
-            // We set container to 30x30. It might clip.
-            // Let's change the container to match asset size? Or scale down.
-            // Let's accept clipping or overflow for a moment, or try to center it.
-            // backgroundPosition is top-left.
-
-            // Center the background image within the 30x30 box?
-            // -${asset.x}px 
-
-            // IMPORTANT: To support scaling, we'd need single images again or a very specific sprite approach.
-            // Let's update `width` / `height` of the icon to match the ASSET size (from CHAR_MAP), then scale the icon div using CSS transform to fit 30px target.
-
-            icon.style.width = `${asset.w}px`;
-            icon.style.height = `${asset.h}px`;
 
             const targetSize = 26;
             const maxDim = Math.max(asset.w, asset.h);
             const scale = Math.min(1, targetSize / maxDim);
 
-            icon.style.transformOrigin = 'center center'; // Scale from center
-
-            // Combine rotation (from relPos) and scaling.
             let rotation = '0deg';
             if (relPos === 1) rotation = '-90deg';
             else if (relPos === 2) rotation = '180deg';
@@ -111,53 +108,88 @@ export class CenterRenderer {
             icon.style.transform = `rotate(${rotation}) scale(${scale})`;
 
             // Positioning Logic
-            // "Left side from player's perspective"
-            if (relPos === 0) { // Bottom -> Left side is Bottom-Left
+            if (relPos === 0) { // Bottom
                 icon.style.bottom = '8px';
                 icon.style.left = '8px';
-                // 0 deg
-            } else if (relPos === 1) { // Right -> Left side is Bottom-Right
+            } else if (relPos === 1) { // Right
                 icon.style.right = '8px';
                 icon.style.bottom = '8px';
-            } else if (relPos === 2) { // Top -> Left side is Top-Right
+            } else if (relPos === 2) { // Top
                 icon.style.top = '8px';
                 icon.style.right = '8px';
-            } else if (relPos === 3) { // Left -> Left side is Top-Left
+            } else if (relPos === 3) { // Left
                 icon.style.left = '8px';
                 icon.style.top = '8px';
             }
             center.appendChild(icon);
         });
 
-        // Dora: Always 5 tiles. Fill missing with 'back'.
+        // 2. Center Content Container
+        const contentContainer = document.createElement('div');
+        Object.assign(contentContainer.style, {
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '2px'
+        });
+
+        // Row 1: [RoundWind] [RoundNum] [Kyoku] (Images)
+        const row1 = document.createElement('div');
+        Object.assign(row1.style, {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0px',
+            marginBottom: '4px'
+        });
+
+        // Round Wind (0-3 -> E S W N)
+        const roundWindNames = ['東', '南', '西', '北'];
+        const rWindIdx = Math.floor(state.round / 4);
+        const rWindKey = roundWindNames[rWindIdx] || '東';
+
+        // Round Number (0-3 -> 1 2 3 4)
+        const rNumIdx = state.round % 4;
+        const rNumKey = ['一', '二', '三', '四'][rNumIdx] || '一';
+
+        row1.appendChild(makeImg(rWindKey, 26));
+        row1.appendChild(makeImg(rNumKey, 26));
+        row1.appendChild(makeImg('局', 26));
+
+        contentContainer.appendChild(row1);
+
+        // Row 2: Text "{honba}, {kyotaku}"
+        const row2 = document.createElement('div');
+        row2.innerText = `${state.honba}, ${state.kyotaku}`;
+        Object.assign(row2.style, {
+            fontSize: '1.2em',
+            fontWeight: 'bold',
+            color: 'white',
+            marginBottom: '8px',
+            fontFamily: 'monospace'
+        });
+        contentContainer.appendChild(row2);
+
+        // Row 3: Dora Tiles
+        const row3 = document.createElement('div');
+        Object.assign(row3.style, {
+            display: 'flex',
+            gap: '2px'
+        });
+
         const doraTiles = [...state.doraMarkers];
         while (doraTiles.length < 5) {
             doraTiles.push('back');
         }
 
-        const doraHtml = doraTiles.map((t: string) =>
+        row3.innerHTML = doraTiles.map((t: string) =>
             `<div style="width:28px; height:38px;">${TileRenderer.getTileHtml(t)}</div>`
         ).join('');
 
-        // Helper for formatting round
-        const formatRound = (r: number) => {
-            const winds = ['E', 'S', 'W', 'N'];
-            const w = winds[Math.floor(r / 4)];
-            const k = (r % 4) + 1;
-            return `${w}${k}`;
-        };
+        contentContainer.appendChild(row3);
 
-        center.innerHTML += `
-            <div style="margin-bottom: 8px;">
-                <span style="font-size: 1.2em; font-weight: bold;">${formatRound(state.round)}-${state.honba}</span>
-                <span style="font-size: 0.9em; margin-left: 5px;">Depo: ${state.kyotaku}</span>
-            </div>
-            <div style="display:flex; align-items: center; gap: 5px;">
-                <div style="display:flex; gap:2px;">
-                    ${doraHtml}
-                </div>
-            </div>
-        `;
+        center.appendChild(contentContainer);
 
         return center;
     }
