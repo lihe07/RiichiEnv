@@ -2,7 +2,9 @@
 <img src="https://raw.githubusercontent.com/smly/RiichiEnv/main/docs/assets/logo.jpg" width="35%">
 
 <br />
+
 **Accelerating Reproducible Mahjong Research**
+
 <br />
 
 [![CI](https://github.com/smly/RiichiEnv/actions/workflows/ci.yml/badge.svg)](https://github.com/smly/RiichiEnv/actions/workflows/ci.yml)
