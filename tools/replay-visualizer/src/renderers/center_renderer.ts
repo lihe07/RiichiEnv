@@ -132,7 +132,7 @@ export class CenterRenderer {
                 fontFamily: 'monospace',
                 fontSize: '16px',
                 fontWeight: 'bold',
-                color: '#ffdd00ff', // Yellow text
+                color: '#ffdd00', // Yellow text
                 textAlign: 'center',
                 whiteSpace: 'nowrap'
             });
@@ -196,7 +196,7 @@ export class CenterRenderer {
 
                 // Position relative to Center Info
                 // We place it slightly outside the box, towards the player
-                const offset = '10px'; // pushes it out by 20px
+                const offset = '10px'; // pushes it out by 10px
 
                 if (relPos === 0) { // Bottom
                     stick.style.bottom = offset;

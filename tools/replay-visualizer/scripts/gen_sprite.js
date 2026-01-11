@@ -68,7 +68,7 @@ async function generateSprite() {
 
     // Special Chars
     for (const s of special) {
-        prepareChar(s.char, s.color, `東${s.suffix}`);
+        prepareChar(s.char, s.color, `${s.char}${s.suffix}`);
     }
 
     // Compose Images (Pass 2)
