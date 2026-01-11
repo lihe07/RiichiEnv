@@ -21,13 +21,9 @@ export class InfoRenderer {
             marginLeft: '0'
         });
 
-        const winds = ['E', 'S', 'W', 'N'];
-        const windLabel = winds[player.wind];
-        const isOya = (player.wind === 0);
-
         infoBox.innerHTML = `
-            <div style="font-size: 1.2em; font-weight: bold; margin-bottom: 4px; color: ${isOya ? '#ff4d4d' : 'white'};">
-                ${windLabel} P${index}
+            <div style="font-size: 1.2em; font-weight: bold; margin-bottom: 4px; color: white;">
+                P${index}
             </div>
             <div style="font-family:monospace; font-size:1.1em;">${player.score}</div>
         `;

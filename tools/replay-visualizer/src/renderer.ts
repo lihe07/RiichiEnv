@@ -73,7 +73,7 @@ export class Renderer {
         oldModals.forEach(el => el.remove());
 
         // Center Info
-        const center = CenterRenderer.renderCenter(state, this.onCenterClick);
+        const center = CenterRenderer.renderCenter(state, this.onCenterClick, this.viewpoint);
         board.appendChild(center);
 
         const angles = [0, -90, 180, 90];
