@@ -124,6 +124,101 @@ export class CenterRenderer {
             center.appendChild(icon);
         });
 
+        // Helper to render score row (Text version)
+        const makeScoreRow = (score: number) => {
+            const row = document.createElement('div');
+            row.innerText = score.toString();
+            Object.assign(row.style, {
+                fontFamily: 'monospace',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                color: '#ffdd00ff', // Yellow text
+                textAlign: 'center',
+                whiteSpace: 'nowrap'
+            });
+            return row;
+        };
+
+        // Render Scores (Edges)
+        state.players.forEach((p: any, i: number) => {
+            const relPos = (i - viewpoint + 4) % 4;
+            const scoreRow = makeScoreRow(p.score);
+
+            Object.assign(scoreRow.style, {
+                position: 'absolute',
+                zIndex: '11'
+            });
+
+            if (relPos === 0) { // Bottom (Self)
+                scoreRow.style.bottom = '20px';
+                scoreRow.style.left = '50%';
+                scoreRow.style.transform = 'translate(-50%, 0)';
+            } else if (relPos === 1) { // Right (Shimocha)
+                scoreRow.style.right = '26px';
+                scoreRow.style.top = '50%';
+                scoreRow.style.transform = 'translate(50%, -50%) rotate(-90deg)';
+                scoreRow.style.transformOrigin = 'center center';
+            } else if (relPos === 2) { // Top (Toimen)
+                scoreRow.style.top = '20px';
+                scoreRow.style.left = '50%';
+                scoreRow.style.transform = 'translate(-50%, 0) rotate(180deg)';
+            } else if (relPos === 3) { // Left (Kamicha)
+                scoreRow.style.left = '26px';
+                scoreRow.style.top = '50%';
+                scoreRow.style.transform = 'translate(-50%, -50%) rotate(90deg)';
+            }
+            center.appendChild(scoreRow);
+
+            // Riichi Stick
+            if (p.riichi) {
+                const stick = document.createElement('div');
+                Object.assign(stick.style, {
+                    position: 'absolute',
+                    width: '100px',
+                    height: '8px',
+                    backgroundColor: 'white',
+                    borderRadius: '4px',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: '12'
+                });
+
+                const dot = document.createElement('div');
+                Object.assign(dot.style, {
+                    width: '6px',
+                    height: '6px',
+                    backgroundColor: '#d00',
+                    borderRadius: '50%'
+                });
+                stick.appendChild(dot);
+
+                // Position relative to Center Info
+                // We place it slightly outside the box, towards the player
+                const offset = '10px'; // pushes it out by 20px
+
+                if (relPos === 0) { // Bottom
+                    stick.style.bottom = offset;
+                    stick.style.left = '50%';
+                    stick.style.transform = 'translate(-50%, 0)';
+                } else if (relPos === 1) { // Right
+                    stick.style.right = offset;
+                    stick.style.top = '50%';
+                    stick.style.transform = 'translate(50%, -50%) rotate(90deg)';
+                } else if (relPos === 2) { // Top
+                    stick.style.top = offset;
+                    stick.style.left = '50%';
+                    stick.style.transform = 'translate(-50%, 0)'; // No rotation needed for bar, it's symmetric. But if dot placement matters? Dot is centered.
+                } else if (relPos === 3) { // Left
+                    stick.style.left = offset;
+                    stick.style.top = '50%';
+                    stick.style.transform = 'translate(-50%, -50%) rotate(90deg)';
+                }
+                center.appendChild(stick);
+            }
+        });
+
         // 2. Center Content Container
         const contentContainer = document.createElement('div');
         Object.assign(contentContainer.style, {

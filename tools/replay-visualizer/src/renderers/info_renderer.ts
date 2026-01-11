@@ -25,11 +25,7 @@ export class InfoRenderer {
             <div style="font-size: 1.2em; font-weight: bold; margin-bottom: 4px; color: white;">
                 P${index}
             </div>
-            <div style="font-family:monospace; font-size:1.1em;">${player.score}</div>
         `;
-        if (player.riichi) {
-            infoBox.innerHTML += '<div style="color:#ff6b6b; font-weight:bold; font-size:0.9em; margin-top:2px;">REACH</div>';
-        }
 
         // Blinking Bar for Active Player
         if (index === currentActor) {
