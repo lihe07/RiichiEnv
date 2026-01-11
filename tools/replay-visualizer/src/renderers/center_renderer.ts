@@ -184,7 +184,7 @@ export class CenterRenderer {
         }
 
         row3.innerHTML = doraTiles.map((t: string) =>
-            `<div style="width:28px; height:38px;">${TileRenderer.getTileHtml(t)}</div>`
+            `<div style="width:20px; height:27px;">${TileRenderer.getTileHtml(t)}</div>`
         ).join('');
 
         contentContainer.appendChild(row3);
