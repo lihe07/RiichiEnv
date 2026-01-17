@@ -209,8 +209,8 @@ export class ResultRenderer {
 
             // 4. Yaku List - Updated Style
             if (score.yaku && score.yaku.length > 0) {
-                // Sort by ID ascending
-                score.yaku.sort((a: number, b: number) => a - b);
+                // Sort by ID ascending (copy to avoid mutation)
+                const sortedYaku = [...score.yaku].sort((a: number, b: number) => a - b);
                 
                 const yakuList = document.createElement('ul');
                 yakuList.className = 're-yaku-list';
@@ -226,7 +226,7 @@ export class ResultRenderer {
                     lineHeight: '1.8'
                 });
 
-                score.yaku.forEach((yId: number) => {
+                sortedYaku.forEach((yId: number) => {
                     const li = document.createElement('li');
                     li.textContent = YAKU_MAP[yId] || `Yaku ${yId}`;
                     li.style.borderBottom = '1px dotted #555';
