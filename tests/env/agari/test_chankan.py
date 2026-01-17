@@ -306,7 +306,7 @@ class TestChankan:
         print("Step 1: P0 has Pon offer on 7p")
 
         # 2. All pass.
-        obs = env.step({0: Action(ActionType.PASS), 1: Action(ActionType.PASS), 3: Action(ActionType.PASS)})
+        env.step({0: Action(ActionType.PASS), 1: Action(ActionType.PASS), 3: Action(ActionType.PASS)})
         assert env.current_player == 3
         print("Step 2: All passed, now P3 turn")
 
