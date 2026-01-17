@@ -2687,13 +2687,7 @@ impl RiichiEnv {
         } else {
             let mut w: Vec<u8> = (0..136).collect();
             let mut rng = if let Some(episode_seed) = self.seed {
-                // Preserve previous behavior for the first hand (hand_index == 0),
-                // then derive unique per-hand seeds for subsequent rounds.
-                let hand_seed = if self.hand_index == 0 {
-                    episode_seed
-                } else {
-                    splitmix64(episode_seed ^ self.hand_index)
-                };
+                let hand_seed = splitmix64(episode_seed ^ self.hand_index);
                 self.hand_index = self.hand_index.wrapping_add(1);
                 StdRng::seed_from_u64(hand_seed)
             } else {
