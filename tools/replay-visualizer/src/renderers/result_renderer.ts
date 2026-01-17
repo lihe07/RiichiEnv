@@ -1,4 +1,4 @@
-import { Utils } from '../utils'; // Use Utils for validation if needed, or just standard import
+
 import { YAKU_MAP } from '../constants';
 import { ICON_ARROW_LEFT, ICON_ARROW_RIGHT } from '../icons';
 import { BoardState, PlayerState } from '../types';
@@ -287,6 +287,95 @@ export class ResultRenderer {
         // Initial Render
         renderPage(0);
 
+        return modal;
+    }
+
+    static renderRyukyokuModal(details: { reason?: string, deltas?: number[], scores?: number[] }, state: BoardState): HTMLElement {
+        const modal = document.createElement('div');
+        modal.className = 're-modal-overlay';
+
+        const content = document.createElement('div');
+        content.className = 're-modal-content';
+        content.onclick = (e) => e.stopPropagation();
+
+        modal.appendChild(content);
+
+        // Header
+        const header = document.createElement('div');
+        header.className = 're-modal-title';
+        header.textContent = 'Ryukyoku';
+        content.appendChild(header);
+
+        // Body
+        const body = document.createElement('div');
+        body.className = 're-result-body';
+        Object.assign(body.style, {
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            padding: '20px'
+        });
+
+        // Reason
+        if (details.reason) {
+            const reasonDiv = document.createElement('div');
+            reasonDiv.style.marginBottom = '20px';
+            reasonDiv.style.fontSize = '1.5em';
+            reasonDiv.style.fontWeight = 'bold';
+            
+            if (details.reason === 'Error') {
+                 reasonDiv.innerHTML = 'Reason: <span style="color: #ff4757;">Error (Penalty)</span>';
+            } else {
+                 reasonDiv.textContent = `Reason: ${details.reason}`;
+            }
+            body.appendChild(reasonDiv);
+        }
+
+        // Score info (Deltas)
+        if (details.deltas && details.deltas.length === 4) {
+             const scoreContainer = document.createElement('div');
+             Object.assign(scoreContainer.style, {
+                 display: 'flex',
+                 gap: '20px',
+                 marginTop: '20px',
+                 width: '100%',
+                 justifyContent: 'center'
+             });
+
+            details.deltas.forEach((delta: number, i: number) => {
+                 const pDiv = document.createElement('div');
+                  Object.assign(pDiv.style, {
+                     background: 'rgba(255,255,255,0.1)',
+                     padding: '15px',
+                     borderRadius: '8px',
+                     textAlign: 'center',
+                     minWidth: '80px',
+                     display: 'flex',
+                     flexDirection: 'column',
+                     gap: '5px'
+                 });
+                 
+                 const name = document.createElement('div');
+                 name.textContent = `Player ${i}`;
+                 name.style.fontSize = '0.9em';
+                 name.style.color = '#ccc';
+
+                 const val = document.createElement('div');
+                 val.textContent = delta > 0 ? `+${delta}` : `${delta}`;
+                 val.style.fontWeight = 'bold';
+                 val.style.fontSize = '1.3em';
+                 if (delta > 0) val.style.color = '#7bed9f';
+                 else if (delta < 0) val.style.color = '#ff6b6b';
+                 else val.style.color = '#fff';
+                 
+                 pDiv.appendChild(name);
+                 pDiv.appendChild(val);
+                 scoreContainer.appendChild(pDiv);
+            });
+            body.appendChild(scoreContainer);
+        }
+
+        content.appendChild(body);
         return modal;
     }
 

@@ -228,20 +228,27 @@ export class Renderer {
         });
 
         // End Kyoku Modal
-        if (state.lastEvent && state.lastEvent.type === 'end_kyoku' && state.lastEvent.meta && state.lastEvent.meta.results) {
-            const results = state.lastEvent.meta.results;
-            // Use new ResultRenderer
-            const modal = ResultRenderer.renderModal(results, state);
+        if (state.lastEvent && state.lastEvent.type === 'end_kyoku' && state.lastEvent.meta) {
+            let modal: HTMLElement | null = null;
 
-            // Click background to close
-            modal.onclick = (e) => {
-                if (e.target === modal) {
-                    modal.remove();
-                }
-            };
+            if (state.lastEvent.meta.ryukyoku) {
+                // Ryukyoku / Error Result
+                modal = ResultRenderer.renderRyukyokuModal(state.lastEvent.meta.ryukyoku, state);
+            } else if (state.lastEvent.meta.results) {
+                // Hora Result
+                const results = state.lastEvent.meta.results;
+                modal = ResultRenderer.renderModal(results, state);
+            }
 
-            // Append to container to cover the whole board area, not just the inner mahjong-board
-            this.container.appendChild(modal);
+            if (modal) {
+                // Click background to close
+                modal.onclick = (e) => {
+                    if (e.target === modal) {
+                        modal!.remove();
+                    }
+                };
+                this.container.appendChild(modal);
+            }
         }
 
         if (debugPanel) {

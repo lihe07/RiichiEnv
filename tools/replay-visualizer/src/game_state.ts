@@ -454,6 +454,26 @@ export class GameState {
                 break;
 
             case 'end_kyoku':
+                // Check for preceding ryukyoku event
+                let ryukyokuEvent: MjaiEvent | null = null;
+                for (let i = this.cursor - 1; i >= 0; i--) {
+                    const prev = this.events[i];
+                    if (prev.type === 'start_kyoku') break;
+                    if (prev.type === 'ryukyoku') {
+                        ryukyokuEvent = prev;
+                        break;
+                    }
+                }
+
+                if (ryukyokuEvent) {
+                    if (!e.meta) e.meta = {};
+                    e.meta.ryukyoku = {
+                        reason: ryukyokuEvent.reason,
+                        deltas: ryukyokuEvent.deltas,
+                        scores: ryukyokuEvent.scores
+                    };
+                }
+
                 // Enrich results with data from preceding hora events
                 if (e.meta && e.meta.results) {
                     e.meta.results.forEach((res: any) => {
