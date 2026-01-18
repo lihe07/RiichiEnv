@@ -28,7 +28,7 @@ class TestKakan:
             current_player=0,
             phase=Phase.WaitAct,
             needs_tsumo=False,
-            drawn_tile=2,  # Duplicated but should be valid
+            drawn_tile=2,  # Use duplicate tid to verify relaxed check
         )
         player_id = 0
         obs_dict = env.get_observations([player_id])

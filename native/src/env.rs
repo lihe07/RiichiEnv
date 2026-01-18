@@ -1317,18 +1317,53 @@ impl RiichiEnv {
                     legals
                         .iter()
                         .any(|l| l.action_type == action.action_type && l.tile == action.tile)
+                } else if legals.contains(action)
+                    || (action.action_type == ActionType::Ankan
+                        && legals.iter().any(|l| {
+                            l.action_type == ActionType::Ankan
+                                && l.consume_tiles == action.consume_tiles
+                        }))
+                {
+                    true
                 } else {
-                    legals.contains(action)
-                        || (action.action_type == ActionType::Ankan
-                            && legals.iter().any(|l| {
-                                // For Ankan, strict equality of `tile` can be problematic because:
-                                // 1. Rust backend generates `tile` as the lowest ID in the quad (canonical form).
-                                // 2. Clients (or tests) might pass the actually drawn tile ID (e.g. 71 vs 68).
-                                // Since `consume_tiles` uniquely identifies the quad being formed (it contains all 4 tiles),
-                                // it is sufficient to check if `consume_tiles` matches a legal Ankan action.
-                                l.action_type == ActionType::Ankan
-                                    && l.consume_tiles == action.consume_tiles
-                            }))
+                    // Relaxed Check: Match structural validity (equivalent tiles) AND actual hand possession
+                    let matching_legal = legals.iter().find(|l| {
+                        l.action_type == action.action_type
+                            && l.tile == action.tile
+                            && l.consume_tiles.len() == action.consume_tiles.len()
+                            && l.consume_tiles.iter().zip(action.consume_tiles.iter()).all(
+                                |(&lt, &at)| {
+                                    // Equivalent if same ID OR (Same type and Both are Non-Red)
+                                    // Red tiles: 16, 52, 88.
+                                    // If one is red, they must be identical (strict match).
+                                    // If both are non-red, they match if same type (t/4).
+                                    let is_red = |t: u8| t == 16 || t == 52 || t == 88;
+                                    if lt == at {
+                                        true
+                                    } else {
+                                        !is_red(lt) && !is_red(at) && lt / 4 == at / 4
+                                    }
+                                },
+                            )
+                    });
+
+                    if let Some(_match) = matching_legal {
+                        // Structurally valid. Now check if player actually HAS these tiles.
+                        let hand = &self.hands[pid as usize];
+                        let mut temp_hand = hand.clone();
+                        let mut has_all = true;
+                        for &c in &action.consume_tiles {
+                            if let Some(pos) = temp_hand.iter().position(|&h| h == c) {
+                                temp_hand.remove(pos);
+                            } else {
+                                has_all = false;
+                                break;
+                            }
+                        }
+                        has_all
+                    } else {
+                        false
+                    }
                 };
 
                 if !is_legal {
