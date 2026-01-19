@@ -1,55 +1,52 @@
-from riichienv import Action, ActionType, Phase, RiichiEnv
+from riichienv import Action, ActionType, Phase
+
+from ..helper import helper_setup_env
 
 
-def test_riichi_pass_action():
-    env = RiichiEnv(seed=42)
-    env.reset()
+class TestRiichiPassAction:
+    """
+    Tests that the player can pass after declaring Riichi and not win.
+    """
 
-    # Manually setup Riichi state for player 0
-    pid = 0
-    rd = env.riichi_declared
-    rd[pid] = True
-    env.riichi_declared = rd
-    env.current_player = pid
-    env.phase = Phase.WaitAct
+    def test_riichi_pass_action(self) -> None:
+        env = helper_setup_env(
+            seed=42,
+            riichi_declared=[True, False, False, False],
+            current_player=0,
+            phase=Phase.WaitAct,
+            hands=[
+                list(range(13)),
+                [],
+                [],
+                [],
+            ],
+            melds=[
+                [],
+                [],
+                [],
+                [],
+            ],
+            drawn_tile=10,
+        )
+        player_id = 0
+        obs_dict = env.get_observations([player_id])
+        obs = obs_dict[player_id]
 
-    # Give a drawn tile
-    env.drawn_tile = 10  # Some tile ID
-    # Ensure this tile is NOT in hand (it's drawn)
-    # And hand has 13 tiles
-    env.hands[pid] = list(range(13))  # Dummy hand
+        # expected lecal actions => [ActionType.Discard, ActionType.Tsumo]
+        assert ActionType.Discard in [a.action_type for a in obs.legal_actions()], (
+            "DISCARD should be available in Riichi"
+        )
+        assert ActionType.Pass not in [a.action_type for a in obs.legal_actions()], (
+            "PASS should NOT be available in Riichi (WaitAct)"
+        )
+        assert ActionType.Tsumo in [a.action_type for a in obs.legal_actions()], "Tsumo should be available in Riichi"
 
-    # Check legal actions
-    obs = env.get_observations([pid])[pid]
-    actions = obs.legal_actions()
-
-    types = [a.action_type for a in actions]
-    assert ActionType.DISCARD in types, "DISCARD (tsumogiri) should be available in Riichi"
-    for a in actions:
-        if a.action_type == ActionType.DISCARD:
-            # Must be tsumogiri
-            pass  # We don't check tile equality here since env.drawn_tile is set manually.
-            # But we can check if it aligns with what we expect.
-            # In Rust, if drawn_tile is set, it allows discarding it.
-            pass
-    assert ActionType.PASS not in types, "PASS should NOT be available in Riichi (WaitAct)"
-
-    # Execute DISCARD (Tsumogiri) which is the valid move
-    # env.drawn_tile is 10.
-    act = Action(ActionType.Discard, 10)
-    obs = env.step({pid: act})
-
-    # Verify discard happened
-    assert env.last_discard is not None
-    # Rust last_discard is tuple (seat, tile)
-    assert env.last_discard == (pid, 10)
-    # Drawn tile is cleared
-    assert env.drawn_tile is None or env.current_player != pid
-    # Turn advanced (unless mid-game logic keeps it, but here it should advance)
-    # Check mjai log for dahai tsumogiri
-    env.mjai_log[-2]  # -1 might be tsumo for next player
-    # Actually wait, step appends dahai, then checks claims, then maybe tsumo for next.
-    # Find the dahai event
-    dahai_ev = next((e for e in reversed(env.mjai_log) if e["type"] == "dahai" and e["actor"] == pid), None)
-    assert dahai_ev is not None
-    assert dahai_ev["tsumogiri"] is True
+        act = Action(ActionType.Discard, 10)
+        obs = env.step({player_id: act})
+        assert 1 in obs, "Should be player 1's turn. Ensure the game has not been aborted."
+        assert env.phase == Phase.WaitAct
+        assert env.current_player == 1
+        assert env.last_discard == (0, 10)
+        assert env.mjai_log[-2]["type"] == "dahai"
+        assert env.mjai_log[-2]["actor"] == 0
+        assert env.mjai_log[-2]["tsumogiri"] is True
