@@ -75,3 +75,37 @@ class TestRiichiMarker:
             env.step({0: discards[0]})
             assert not env.discard_is_riichi[0][-1]
             assert env.riichi_declaration_index[0] is None
+
+    def test_reset_clears_markers(self) -> None:
+        """
+        Verify that reset() clears the riichi markers.
+        """
+        env = RiichiEnv(seed=1483)
+        env.reset()
+
+        # P0 declares Riichi
+        obs = env.get_observations([0])[0]
+        legals = obs.legal_actions()
+        riichi_actions = [a for a in legals if a.action_type == ActionType.Riichi]
+        assert riichi_actions
+
+        env.step({0: riichi_actions[0]})
+
+        # Discard
+        obs = env.get_observations([0])[0]
+        legals = obs.legal_actions()
+        discards = [a for a in legals if a.action_type == ActionType.Discard]
+        env.step({0: discards[0]})
+
+        # Check markers set
+        assert env.riichi_declaration_index[0] is not None
+        assert True in env.discard_is_riichi[0]
+
+        # RESET
+        env.reset()
+
+        # Check markers cleared
+        assert env.riichi_declaration_index[0] is None
+
+        # discards should be empty, so discard_is_riichi should be empty
+        assert len(env.discard_is_riichi[0]) == 0

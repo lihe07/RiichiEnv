@@ -2729,6 +2729,8 @@ impl RiichiEnv {
         self.melds = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
         self.discards = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
         self.discard_from_hand = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
+        self.discard_is_riichi = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
+        self.riichi_declaration_index = [None; 4];
         self.is_done = false;
         self.current_claims = HashMap::new();
         self.pending_kan = None;
