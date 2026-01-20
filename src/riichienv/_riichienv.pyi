@@ -72,7 +72,8 @@ class Meld:
     meld_type: MeldType
     tiles: list[int]
     opened: bool
-    def __init__(self, meld_type: MeldType, tiles: list[int], opened: bool): ...
+    from_who: int
+    def __init__(self, meld_type: MeldType, tiles: list[int], opened: bool, from_who: int): ...
 
 class Conditions:
     tsumo: bool

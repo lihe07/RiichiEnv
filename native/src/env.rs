@@ -415,6 +415,8 @@ pub struct RiichiEnv {
     pub(crate) hand_index: u64,
     #[pyo3(get)]
     pub rule: crate::rule::GameRule,
+    #[pyo3(get)]
+    pub pao: [HashMap<u8, u8>; 4],
 }
 
 impl RiichiEnv {
@@ -861,6 +863,12 @@ impl RiichiEnv {
             hand_index: 0,
             forbidden_discards: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
             rule: rule.unwrap_or_default(),
+            pao: [
+                HashMap::new(),
+                HashMap::new(),
+                HashMap::new(),
+                HashMap::new(),
+            ],
         };
         Python::attach(|py| env.reset(py, None, None, round_wind, None, None, None, seed))?;
         Ok(env)
@@ -990,6 +998,12 @@ impl RiichiEnv {
         self.agari_results = HashMap::new();
         self.last_agari_results = HashMap::new();
         self.round_end_scores = None;
+        self.pao = [
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+        ];
 
         self._initialize_round(
             oya.unwrap_or(self.oya),
@@ -1287,6 +1301,9 @@ impl RiichiEnv {
         py: Python<'py>,
         actions: HashMap<u8, Action>,
     ) -> PyResult<Py<PyAny>> {
+        if self.is_done {
+            return self.get_obs_py(py, None);
+        }
         // --- Added: Validation for illegal actions ---
         if !self.is_done {
             let mut illegal_actor: Option<u8> = None;
@@ -1751,6 +1768,7 @@ impl RiichiEnv {
                                 meld_type: MeldType::Angang,
                                 tiles: consumed.clone(),
                                 opened: false, // Ankan is closed
+                                from_who: -1,
                             };
                             self.melds[p_usize].push(m);
                             self.hands[p_usize].sort();
@@ -2133,6 +2151,7 @@ impl RiichiEnv {
                                 meld_type: MeldType::Angang,
                                 tiles: consumed.clone(),
                                 opened: false,
+                                from_who: -1,
                             };
                             self.melds[p_usize].push(m);
                             self.hands[p_usize].sort();
@@ -2908,7 +2927,16 @@ impl RiichiEnv {
     ) -> [i32; 4] {
         let mut deltas = [0; 4];
         let h_val = if include_bonus { self.honba as i32 } else { 0 };
-        let pao_pid: Option<u8> = None; // TODO: Implement Pao if needed
+        let mut pao_pid: Option<u8> = None;
+        if agari.yaku.contains(&crate::yaku::ID_DAISANGEN) {
+            if let Some(&p) = self.pao[winner as usize].get(&(crate::yaku::ID_DAISANGEN as u8)) {
+                pao_pid = Some(p);
+            }
+        } else if agari.yaku.contains(&crate::yaku::ID_DAISUUSHI) {
+            if let Some(&p) = self.pao[winner as usize].get(&(crate::yaku::ID_DAISUUSHI as u8)) {
+                pao_pid = Some(p);
+            }
+        }
 
         if is_tsumo {
             let total = if winner == self.oya {
@@ -3054,7 +3082,7 @@ impl RiichiEnv {
 
                         // Simulate ankan
                         let mut next_melds = self.melds[pid as usize].clone();
-                        next_melds.push(Meld::new(MeldType::Angang, matches.clone(), false));
+                        next_melds.push(Meld::new(MeldType::Angang, matches.clone(), false, -1));
                         let mut next_hand = hand.clone();
                         for &m in &matches {
                             if let Some(pos) = next_hand.iter().position(|&x| x == m) {
@@ -3328,7 +3356,12 @@ impl RiichiEnv {
                     let mut old_meld = self.melds[pid as usize].remove(pos);
                     old_meld.tiles.push(action.tile.unwrap());
                     old_meld.tiles.sort();
-                    let new_meld = Meld::new(MeldType::Addgang, old_meld.tiles.clone(), true);
+                    let new_meld = Meld::new(
+                        MeldType::Addgang,
+                        old_meld.tiles.clone(),
+                        true,
+                        old_meld.from_who,
+                    );
                     self.melds[pid as usize].push(new_meld);
 
                     // Log Kakan
@@ -3461,7 +3494,8 @@ impl RiichiEnv {
             }
             tiles.sort();
 
-            let meld = Meld::new(m_type, tiles.clone(), opened);
+            let from_who = from_pid.map(|p| p as i8).unwrap_or(-1);
+            let meld = Meld::new(m_type, tiles.clone(), opened, from_who);
             self.melds[pid as usize].push(meld);
 
             // Log Claim
@@ -3497,10 +3531,43 @@ impl RiichiEnv {
                 self.pending_kan_dora_count += 1;
             }
 
-            // Hand sorting? Usually done.
             self.hands[pid as usize].sort();
+            self._check_pao_conditions(pid);
         }
         Ok(())
+    }
+
+    // Helper to update Pao state
+    fn _check_pao_conditions(&mut self, pid: u8) {
+        let melds = &self.melds[pid as usize];
+        let dragons = [31, 32, 33]; // Haku, Hatsu, Chun
+                                    // Winds: 27, 28, 29, 30
+
+        let mut d_melds = Vec::new();
+        let mut w_melds = Vec::new();
+
+        for m in melds {
+            let t = m.tiles[0] / 4;
+            if dragons.contains(&t) {
+                d_melds.push(m);
+            } else if (27..=30).contains(&t) {
+                w_melds.push(m);
+            }
+        }
+
+        if d_melds.len() == 3 {
+            let last = d_melds.last().unwrap();
+            if last.from_who != -1 && last.from_who != pid as i8 {
+                self.pao[pid as usize].insert(crate::yaku::ID_DAISANGEN as u8, last.from_who as u8);
+            }
+        }
+
+        if w_melds.len() == 4 {
+            let last = w_melds.last().unwrap();
+            if last.from_who != -1 && last.from_who != pid as i8 {
+                self.pao[pid as usize].insert(crate::yaku::ID_DAISUUSHI as u8, last.from_who as u8);
+            }
+        }
     }
 
     fn _check_tsumo(&self, pid: u8, tile: u8) -> bool {
@@ -3526,14 +3593,8 @@ impl RiichiEnv {
             tsumi: self.honba as u32,
         };
 
-        // Need to construct AgariCalculator
-        // ...
-        // It takes Vec<u8> of hand (13 tiles).
-        // self.hands has 13 tiles? Yes if we haven't added drawn tile yet.
-        // Wait, `_get_legal_actions` adds drawn tile to local `h14`.
         // `AgariCalculator::new` takes `tiles_136` (hand).
         // `calc` takes `win_tile`.
-        // So we pass `self.hands[pid]` (13 tiles) to `new`.
         let calc = crate::agari_calculator::AgariCalculator::new(hand.clone(), melds.clone());
         let agari = calc.calc(tile, self.dora_indicators.clone(), vec![], Some(cond));
 

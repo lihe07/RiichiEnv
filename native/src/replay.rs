@@ -1016,10 +1016,19 @@ impl AgariContextIterator {
                             TileConverter::match_and_remove_u8(&mut self.current_hands[*seat], *t);
                         }
                     }
+                    // Infer from_who from cpg_action if possible, or default to -1
+                    let mut from_who = -1;
+                    for &f in froms {
+                        if f != *seat {
+                            from_who = f as i8;
+                            break;
+                        }
+                    }
                     self.melds[*seat].push(Meld {
                         meld_type: *meld_type,
                         tiles: tiles.clone(),
                         opened: true,
+                        from_who,
                     });
                     if *meld_type == MeldType::Gang {
                         self.rinshan[*seat] = true;
@@ -1103,6 +1112,7 @@ impl AgariContextIterator {
                             meld_type: *meld_type,
                             tiles: m_tiles,
                             opened: false,
+                            from_who: -1,
                         });
                         self.rinshan[*seat] = true;
 
@@ -1128,6 +1138,7 @@ impl AgariContextIterator {
                                 meld_type: *meld_type,
                                 tiles: tiles.clone(),
                                 opened: true,
+                                from_who: -1,
                             });
                         }
                         TileConverter::match_and_remove_u8(
