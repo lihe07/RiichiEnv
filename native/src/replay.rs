@@ -215,6 +215,19 @@ impl ReplayGame {
         Ok(ReplayGame { rounds })
     }
 
+    #[staticmethod]
+    fn from_paifu(json_str: String) -> PyResult<Self> {
+        let rounds_raw: Vec<Vec<RawAction>> = serde_json::from_str(&json_str)
+            .map_err(|e| PyValueError::new_err(format!("Failed to parse JSON: {}", e)))?;
+
+        let mut rounds = Vec::with_capacity(rounds_raw.len());
+        for r_raw in rounds_raw {
+            rounds.push(Kyoku::from_raw_actions(r_raw));
+        }
+
+        Ok(ReplayGame { rounds })
+    }
+
     fn num_rounds(&self) -> usize {
         self.rounds.len()
     }
