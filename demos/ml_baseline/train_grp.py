@@ -103,19 +103,24 @@ def main():
 def check_reward_predictions() -> None:
     kyoku_df = pl.read_parquet("/data/train_grp.pq", n_rows=10)
     kyoku_df = kyoku_df.drop(["p0_hand", "p1_hand", "p2_hand", "p3_hand", "p0_dora_marker"])
+
     kyoku_features = kyoku_df.select([
+        # scores at the start of the kyoku
         "p0_init_score",
         "p1_init_score",
         "p2_init_score",
         "p3_init_score",
+        # scores at the end of the kyoku
         "p0_end_score",
         "p1_end_score",
         "p2_end_score",
         "p3_end_score",
+        # delta scores
         "p0_delta_score",
         "p1_delta_score",
         "p2_delta_score",
         "p3_delta_score",
+        # ba, kyoku, honba, riichi sticks
         "chang",
         "ju",
         "ben",
