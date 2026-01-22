@@ -122,6 +122,7 @@ pub enum MjaiEvent {
     Ryukyoku {
         reason: Option<String>,
         tehais: Option<Vec<Vec<String>>>, // Revealed hands
+        #[serde(alias = "deltas")]
         delta: Option<Vec<i32>>,
         scores: Option<Vec<i32>>,
     },
@@ -150,6 +151,7 @@ struct KyokuBuilder {
     // Internal tracking
     liqi_flags: Vec<bool>, // Who has declared reach (to set `is_liqi` on discard)
     wliqi_flags: Vec<bool>, // Who has effectively achieved Double Riichi
+    reach_accepted: Vec<bool>,
     first_discard: Vec<bool>,
     has_calls: bool,
 }
@@ -199,6 +201,7 @@ impl KyokuBuilder {
             ura_doras: Vec::new(),
             liqi_flags: vec![false; 4],
             wliqi_flags: vec![false; 4],
+            reach_accepted: vec![false; 4],
             first_discard: vec![true; 4],
             has_calls: false,
         }
@@ -504,7 +507,8 @@ impl MjaiReplay {
                 } else if let Some(d) = delta {
                     for (i, val) in d.iter().enumerate() {
                         if i < builder.end_scores.len() {
-                            builder.end_scores[i] = builder.scores[i] + val;
+                            let riichi_cost = if builder.reach_accepted[i] { 1000 } else { 0 };
+                            builder.end_scores[i] = builder.scores[i] + val - riichi_cost;
                         }
                     }
                 }
@@ -519,7 +523,8 @@ impl MjaiReplay {
                 } else if let Some(d) = delta {
                     for (i, val) in d.iter().enumerate() {
                         if i < builder.end_scores.len() {
-                            builder.end_scores[i] = builder.scores[i] + val;
+                            let riichi_cost = if builder.reach_accepted[i] { 1000 } else { 0 };
+                            builder.end_scores[i] = builder.scores[i] + val - riichi_cost;
                         }
                     }
                 }

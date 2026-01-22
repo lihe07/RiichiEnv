@@ -1,5 +1,12 @@
 """
 Global Reward Predictor
+
+This script trains a global reward predictor to predict the reward of each player in a game.
+
+The script will load the training data from the parquet files in the data directory.
+
+Usage:
+    python train_grp.py
 """
 import tqdm
 import polars as pl

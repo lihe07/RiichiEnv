@@ -91,3 +91,10 @@ def test_mjai_replay_real_file():
     assert "scores" in features
     assert "end_scores" in features
     assert "wliqi" in features
+
+    # Verify grp features
+    assert kyokus[0].grp_features()["scores"] == [25000, 25000, 25000, 25000]
+    assert kyokus[0].grp_features()["end_scores"] == [21000, 22000, 23000, 34000]
+    assert kyokus[0].grp_features()["delta_scores"] == [-4000, -3000, -2000, 9000]
+    for idx in range(len(kyokus) - 1):
+        assert kyokus[idx + 1].grp_features()["scores"] == kyokus[idx].grp_features()["end_scores"]
