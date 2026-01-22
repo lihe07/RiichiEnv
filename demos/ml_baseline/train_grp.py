@@ -10,11 +10,9 @@ Usage:
 """
 import tqdm
 import polars as pl
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
@@ -95,7 +93,6 @@ class Trainer:
 
 def main():
     device_str = "cuda"
-    device = torch.device(device_str)
 
     df_trn = pl.concat([
         pl.read_parquet("/data/train_grp.pq"),
