@@ -8,7 +8,7 @@ from typing import Iterator
 
 import tqdm
 
-from riichienv import AgariCalculator, Conditions, ReplayGame, Kyoku
+from riichienv import AgariCalculator, Conditions, MjSoulReplay, Kyoku
 from mjsoul_parser import MjsoulPaifuParser, Paifu
 
 YAKUMAN_IDS = [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 47, 48, 49, 50]
@@ -20,7 +20,7 @@ def iter_game_kyoku(paifu: Paifu) -> Iterator[Kyoku]:
             g.write(json.dumps({"rounds": paifu.data}).encode("utf-8"))
         f.flush()
         f.seek(0)
-        game = ReplayGame.from_json(f.name)
+        game = MjSoulReplay.from_json(f.name)
 
     for kyoku in game.take_kyokus():
         yield kyoku
