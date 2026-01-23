@@ -19,7 +19,9 @@ testpaths = ["tests"]
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/mjsoul_parser"]
+dev-mode-dirs = ["src"]
+
+
 
 [tool.ruff]
 target-version = "py313"
