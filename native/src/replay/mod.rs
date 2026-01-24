@@ -7,7 +7,9 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods};
 use std::sync::Arc;
 
+use crate::action::Action as EnvAction;
 use crate::agari_calculator::AgariCalculator;
+use crate::observation::Observation;
 use crate::types::{Agari, Conditions, Meld, MeldType};
 
 pub mod mjai_replay;
@@ -76,6 +78,137 @@ pub struct HuleData {
 }
 
 #[pyclass]
+pub struct KyokuStepIterator {
+    state: crate::state::GameState,
+    actions: Arc<[Action]>,
+    idx: usize,
+    pending_action: Option<(u8, EnvAction)>,
+}
+
+#[pymethods]
+impl KyokuStepIterator {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> Option<(u8, Observation, EnvAction)> {
+        let actions = slf.actions.clone();
+
+        if let Some((pid, action)) = slf.pending_action.take() {
+            let obs = slf.state.get_observation(pid);
+            let current_log_action = &actions[slf.idx];
+            slf.state.apply_log_action(current_log_action);
+            slf.idx += 1;
+            return Some((pid, obs, action));
+        }
+
+        while slf.idx < actions.len() {
+            let action = &actions[slf.idx];
+
+            match action {
+                Action::DealTile { .. }
+                | Action::Dora { .. }
+                | Action::NoTile
+                | Action::LiuJu { .. } => {
+                    slf.state.apply_log_action(action);
+                    slf.idx += 1;
+                }
+                Action::Other(_) => {
+                    slf.idx += 1;
+                }
+                Action::DiscardTile {
+                    seat,
+                    tile,
+                    is_liqi,
+                    ..
+                } => {
+                    let pid = *seat as u8;
+                    let obs = slf.state.get_observation(pid);
+
+                    if *is_liqi {
+                        let riichi_action =
+                            EnvAction::new(crate::action::ActionType::Riichi, None, Vec::new());
+                        let discard_action = EnvAction::new(
+                            crate::action::ActionType::Discard,
+                            Some(*tile),
+                            Vec::new(),
+                        );
+                        slf.pending_action = Some((pid, discard_action));
+                        slf.state.riichi_declared[pid as usize] = true;
+                        return Some((pid, obs, riichi_action));
+                    } else {
+                        let env_action = EnvAction::new(
+                            crate::action::ActionType::Discard,
+                            Some(*tile),
+                            Vec::new(),
+                        );
+                        slf.state.apply_log_action(action);
+                        slf.idx += 1;
+                        return Some((pid, obs, env_action));
+                    }
+                }
+                Action::ChiPengGang {
+                    seat,
+                    meld_type,
+                    tiles,
+                    ..
+                } => {
+                    let pid = *seat as u8;
+                    let obs = slf.state.get_observation(pid);
+                    let env_action_type = match meld_type {
+                        MeldType::Chi => crate::action::ActionType::Chi,
+                        MeldType::Peng => crate::action::ActionType::Pon,
+                        MeldType::Gang => crate::action::ActionType::Daiminkan,
+                        _ => crate::action::ActionType::Chi,
+                    };
+
+                    let t = tiles.first().copied();
+                    let env_action = EnvAction::new(env_action_type, t, tiles.to_vec());
+
+                    slf.state.apply_log_action(action);
+                    slf.idx += 1;
+                    return Some((pid, obs, env_action));
+                }
+                Action::AnGangAddGang {
+                    seat,
+                    meld_type,
+                    tiles,
+                    ..
+                } => {
+                    let pid = *seat as u8;
+                    let obs = slf.state.get_observation(pid);
+                    let atype = match meld_type {
+                        MeldType::Angang => crate::action::ActionType::Ankan,
+                        MeldType::Addgang => crate::action::ActionType::Kakan,
+                        _ => crate::action::ActionType::Ankan,
+                    };
+                    let tile = tiles.first().copied();
+                    let env_action = EnvAction::new(atype, tile, tiles.to_vec());
+                    slf.state.apply_log_action(action);
+                    slf.idx += 1;
+                    return Some((pid, obs, env_action));
+                }
+                Action::Hule { hules } => {
+                    let first = &hules[0];
+                    let pid = first.seat as u8;
+                    let obs = slf.state.get_observation(pid);
+                    let atype = if first.zimo {
+                        crate::action::ActionType::Tsumo
+                    } else {
+                        crate::action::ActionType::Ron
+                    };
+                    let env_action = EnvAction::new(atype, None, Vec::new());
+                    slf.state.apply_log_action(action);
+                    slf.idx += 1;
+                    return Some((pid, obs, env_action));
+                }
+            }
+        }
+        None
+    }
+}
+
+#[pyclass]
 #[derive(Clone)]
 pub struct Kyoku {
     pub scores: Vec<i32>,
@@ -97,6 +230,42 @@ pub struct Kyoku {
 impl Kyoku {
     fn take_agari_contexts(&self) -> PyResult<AgariContextIterator> {
         Ok(AgariContextIterator::new(self.clone()))
+    }
+
+    fn steps(&self, rule: crate::rule::GameRule) -> PyResult<KyokuStepIterator> {
+        let mut state = crate::state::GameState::new(0, false, None, 0, rule);
+
+        // Initialize state from Kyoku data
+        let initial_scores: [i32; 4] = self.scores.clone().try_into().unwrap_or([25000; 4]);
+        let doras = self.doras.clone();
+
+        let oya = (self.ju % 4) as u8;
+        let bakaze = match self.chang {
+            0 => crate::types::Wind::East,
+            1 => crate::types::Wind::South,
+            2 => crate::types::Wind::West,
+            3 => crate::types::Wind::North,
+            _ => crate::types::Wind::East,
+        } as u8;
+
+        state._initialize_round(
+            oya,
+            bakaze,
+            self.ben,
+            self.liqibang as u32,
+            None,
+            Some(initial_scores),
+        );
+
+        state.hands = self.hands.clone().try_into().unwrap_or_default();
+        state.dora_indicators = doras;
+
+        Ok(KyokuStepIterator {
+            state,
+            actions: self.actions.clone(),
+            idx: 0,
+            pending_action: None,
+        })
     }
 
     fn events(&self, py: Python) -> PyResult<Py<PyAny>> {
