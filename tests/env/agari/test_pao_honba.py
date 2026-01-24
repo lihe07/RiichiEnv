@@ -15,7 +15,9 @@ class TestPaoHonba:
 
         # Setup Winner (Seat 3) hand
         # Needs to be close to agari
-        env.hands[3] = [0, 4, 8, 12, 16, 20, 24, 28, 32, 120, 121, 122, 123]  # Junk
+        hands = env.hands
+        hands[3] = [0, 4, 8, 12, 16, 20, 24, 28, 32, 120, 121, 122, 123]  # Junk
+        env.hands = hands
         # Actually let's use the log details or just a simple Yakuman setup.
         # Seat 3 hand: 3x 1m, 3x 2m, 3x 3m, 3x 4m, 2x 5m
         env.hands[3] = [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, 16]

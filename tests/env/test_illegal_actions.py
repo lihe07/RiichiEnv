@@ -28,10 +28,18 @@ class TestIllegalActions:
 
         # Verify Penalty
         # 1. MJAI Log should have ryukyoku with reason Error
-        assert env.mjai_log[-1]["type"] == "end_kyoku"
-        assert env.mjai_log[-2]["type"] == "ryukyoku"
-        assert "Error: Illegal Action" in env.mjai_log[-2]["reason"]
-        assert env.mjai_log[-2]["deltas"] == [-12000, 4000, 4000, 4000]
+        # It might not be the very last event if a new round initiated.
+        # But valid end_kyoku should be present.
+        end_kyoku_events = [e for e in env.mjai_log if e["type"] == "end_kyoku"]
+        assert len(end_kyoku_events) > 0, "No end_kyoku event found"
+        # Find ryukyoku event
+        ryukyoku_events = [e for e in env.mjai_log if e["type"] == "ryukyoku"]
+        assert len(ryukyoku_events) > 0, "No ryukyoku event found"
+        ryukyoku_event = ryukyoku_events[-1]
+        assert env.mjai_log.index(ryukyoku_event) < env.mjai_log.index(end_kyoku_events[-1])
+
+        assert "Error: Illegal Action" in ryukyoku_event["reason"]
+        assert ryukyoku_event["deltas"] == [-12000, 4000, 4000, 4000]
 
         # 2. Score Check
         # Oya (P0) Chombo: -12000 total (+4000 for others)

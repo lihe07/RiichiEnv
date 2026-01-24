@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod unit_tests {
+    use crate::action::Phase;
     use crate::agari::{is_agari, is_chiitoitsu, is_kokushi};
-    use crate::env::{Phase, RiichiEnv};
+    use crate::env::RiichiEnv;
     use crate::score::calculate_score;
     use crate::types::Hand;
     use std::collections::HashMap;
@@ -83,7 +84,7 @@ mod unit_tests {
         // Ko pays: ceil(1920/100)*100 = 2000.
         // Total: 3900 + 2000*2 = 7900.
 
-        let score = calculate_score(4, 30, false, true); // Ko Tsumo
+        let score = calculate_score(4, 30, false, true, 0); // Ko Tsumo
 
         assert_eq!(score.pay_tsumo_oya, 3900);
         assert_eq!(score.pay_tsumo_ko, 2000);
@@ -150,81 +151,28 @@ mod unit_tests {
 
     // --- Helper for creating RiichiEnv in tests ---
     fn create_test_env(game_type: u8) -> RiichiEnv {
-        // Construct directly since fields are pub
+        // Construct directly using new API or manual GameState construction
         RiichiEnv {
-            wall: Vec::new(),
-            hands: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
-            melds: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
-            discards: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
-            discard_from_hand: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
-            current_player: 0,
-            turn_count: 0,
-            is_done: false,
-            needs_tsumo: false,
-            needs_initialize_next_round: false,
-            pending_oya_won: false,
-            pending_is_draw: false,
-            scores: [25000; 4],
-            score_deltas: [0; 4],
-            riichi_sticks: 0,
-            riichi_declared: [false; 4],
-            riichi_stage: [false; 4],
-            double_riichi_declared: [false; 4],
-            phase: Phase::WaitAct,
-            active_players: vec![0],
-            last_discard: None,
-            current_claims: HashMap::new(),
-            pending_kan: None,
-            oya: 0,
-            honba: 0,
-            kyoku_idx: 0,
-            dora_indicators: Vec::new(),
-            rinshan_draw_count: 0,
-            pending_kan_dora_count: 0,
-            is_rinshan_flag: false,
-            is_first_turn: true,
-            missed_agari_riichi: [false; 4],
-            missed_agari_doujun: [false; 4],
-            riichi_pending_acceptance: None,
-            nagashi_eligible: [true; 4],
-            drawn_tile: None,
-            wall_digest: String::new(),
-            salt: String::new(),
-            agari_results: HashMap::new(),
-            last_agari_results: HashMap::new(),
-            round_end_scores: None,
-            mjai_log: Vec::new(),
-            mjai_log_per_player: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
-            player_event_counts: [0; 4],
-            round_wind: 0,
-            ippatsu_cycle: [false; 4],
-            game_mode: game_type,
-            skip_mjai_logging: false,
-            seed: None,
-            hand_index: 0,
-            forbidden_discards: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
-            rule: crate::rule::GameRule::default(),
-            pao: [
-                HashMap::new(),
-                HashMap::new(),
-                HashMap::new(),
-                HashMap::new(),
-            ],
-            discard_is_riichi: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
-            riichi_declaration_index: [None; 4],
+            state: crate::state::GameState::new(
+                game_type,
+                false, // skip_mjai_logging
+                None,  // seed
+                0,     // round_wind
+                crate::rule::GameRule::default(),
+            ),
         }
     }
 
     #[test]
     fn test_seeded_shuffle_changes_between_rounds() {
         let mut env = create_test_env(2);
-        env.seed = Some(42);
+        env.state.seed = Some(42);
 
-        env._initialize_next_round(true, false);
-        let digest1 = env.wall_digest.clone();
+        env.state._initialize_next_round(true, false);
+        let digest1 = env.state.wall_digest.clone();
 
-        env._initialize_next_round(true, false);
-        let digest2 = env.wall_digest.clone();
+        env.state._initialize_next_round(true, false);
+        let digest2 = env.state.wall_digest.clone();
 
         assert_ne!(
             digest1, digest2,
@@ -242,47 +190,52 @@ mod unit_tests {
         // Expect: Next round is West 1 (Round Wind 2, Kyoku 0). Game NOT done.
 
         let mut env = create_test_env(2);
-        env.round_wind = 1;
-        env.kyoku_idx = 3;
-        env.oya = 3;
-        env.scores = [25000, 25000, 25000, 25000];
+        env.state.round_wind = 1;
+        env.state.kyoku_idx = 3;
+        env.state.oya = 3;
+        env.state.scores = [25000, 25000, 25000, 25000];
         // We also need to set needs_initialize_next_round to false initially
-        env.needs_initialize_next_round = false;
-        env.nagashi_eligible = [false; 4];
+        env.state.needs_initialize_next_round = false;
+        env.state.nagashi_eligible = [false; 4];
 
         // Trigger Ryukyoku (draw)
-        env._trigger_ryukyoku("exhaustive_draw");
+        env.state._trigger_ryukyoku("exhaustive_draw");
         // This sets needs_initialize_next_round = true, pending_oya_won = false (if nouten), pending_is_draw = true
 
         // Simulate step calling initialize_next_round
-        if env.needs_initialize_next_round {
-            env._initialize_next_round(env.pending_oya_won, env.pending_is_draw);
-            env.needs_initialize_next_round = false;
+        if env.state.needs_initialize_next_round {
+            env.state
+                ._initialize_next_round(env.state.pending_oya_won, env.state.pending_is_draw);
+            env.state.needs_initialize_next_round = false;
         }
 
         assert!(
-            !env.is_done,
+            !env.state.is_done,
             "Game should not be done (Sudden Death should trigger)"
         );
-        assert_eq!(env.round_wind, 2, "Should enter West round");
-        assert_eq!(env.kyoku_idx, 0, "Should be West 1 (Kyoku 0)");
-        assert_eq!(env.oya, 0, "Oya should rotate to player 0");
+        assert_eq!(env.state.round_wind, 2, "Should enter West round");
+        assert_eq!(env.state.kyoku_idx, 0, "Should be West 1 (Kyoku 0)");
+        assert_eq!(env.state.oya, 0, "Oya should rotate to player 0");
 
         // Now set scores > 30000 and trigger draw again.
         // West 1. Oya is 0.
-        env.scores = [31000, 25000, 24000, 20000];
+        env.state.scores = [31000, 25000, 24000, 20000];
 
-        env._trigger_ryukyoku("exhaustive_draw");
-        if env.needs_initialize_next_round {
-            env._initialize_next_round(env.pending_oya_won, env.pending_is_draw);
-            env.needs_initialize_next_round = false;
+        env.state._trigger_ryukyoku("exhaustive_draw");
+        if env.state.needs_initialize_next_round {
+            env.state
+                ._initialize_next_round(env.state.pending_oya_won, env.state.pending_is_draw);
+            env.state.needs_initialize_next_round = false;
         }
 
-        assert!(env.is_done, "Game should be done (Score >= 30000 in West)");
+        assert!(
+            env.state.is_done,
+            "Game should be done (Score >= 30000 in West)"
+        );
 
         // Verify MJAI Event order
         // Check logs for last sequence
-        let logs = &env.mjai_log;
+        let logs = &env.state.mjai_log;
         let event_types: Vec<String> = logs
             .iter()
             .filter_map(|s| {
@@ -299,5 +252,16 @@ mod unit_tests {
 
         // Check if ryukyoku is recently before it
         assert!(event_types.contains(&"ryukyoku".to_string()));
+    }
+
+    #[test]
+    fn test_is_tenpai() {
+        use crate::agari_calculator::AgariCalculator;
+        // 111,222,333m, 444p, 11s (Tenpai on 1s)
+        let hand = vec![0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, 72];
+        let calc = AgariCalculator::new(hand, Vec::new());
+        assert!(calc.is_tenpai());
+        let waits = calc.get_waits_u8();
+        assert!(waits.contains(&18)); // 1s
     }
 }

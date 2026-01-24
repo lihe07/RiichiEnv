@@ -10,27 +10,31 @@ pub struct GameRule {
     pub is_kokushi_musou_13machi_double: bool,
     #[pyo3(get, set)]
     pub yakuman_pao_is_liability_only: bool,
+    #[pyo3(get, set)]
+    pub allow_double_ron: bool,
 }
 
 impl Default for GameRule {
     fn default() -> Self {
-        Self::default_tenhou()
+        Self::default_mjsoul()
     }
 }
 
 #[pymethods]
 impl GameRule {
     #[new]
-    #[pyo3(signature = (allows_ron_on_ankan_for_kokushi_musou=false, is_kokushi_musou_13machi_double=false, yakuman_pao_is_liability_only=false))]
+    #[pyo3(signature = (allows_ron_on_ankan_for_kokushi_musou=false, is_kokushi_musou_13machi_double=false, yakuman_pao_is_liability_only=false, allow_double_ron=true))]
     pub fn new(
         allows_ron_on_ankan_for_kokushi_musou: bool,
         is_kokushi_musou_13machi_double: bool,
         yakuman_pao_is_liability_only: bool,
+        allow_double_ron: bool,
     ) -> Self {
         Self {
             allows_ron_on_ankan_for_kokushi_musou,
             is_kokushi_musou_13machi_double,
             yakuman_pao_is_liability_only,
+            allow_double_ron,
         }
     }
 
@@ -40,6 +44,7 @@ impl GameRule {
             allows_ron_on_ankan_for_kokushi_musou: false,
             is_kokushi_musou_13machi_double: false,
             yakuman_pao_is_liability_only: false,
+            allow_double_ron: true,
         }
     }
 
@@ -49,13 +54,14 @@ impl GameRule {
             allows_ron_on_ankan_for_kokushi_musou: true,
             is_kokushi_musou_13machi_double: true,
             yakuman_pao_is_liability_only: true,
+            allow_double_ron: true,
         }
     }
 
     fn __repr__(&self) -> String {
         format!(
-            "GameRule(allows_ron_on_ankan_for_kokushi_musou={}, is_kokushi_musou_13machi_double={}, yakuman_pao_is_liability_only={})",
-            self.allows_ron_on_ankan_for_kokushi_musou, self.is_kokushi_musou_13machi_double, self.yakuman_pao_is_liability_only
+            "GameRule(allows_ron_on_ankan_for_kokushi_musou={}, is_kokushi_musou_13machi_double={}, yakuman_pao_is_liability_only={}, allow_double_ron={})",
+            self.allows_ron_on_ankan_for_kokushi_musou, self.is_kokushi_musou_13machi_double, self.yakuman_pao_is_liability_only, self.allow_double_ron
         )
     }
 }

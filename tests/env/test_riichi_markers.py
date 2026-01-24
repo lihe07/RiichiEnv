@@ -6,18 +6,18 @@ class TestRiichiMarker:
         """
         Test that discard_is_riichi and riichi_declaration_index are correctly updated.
         """
-        # Seed 1483 is known to have Riichi opportunity for P0 on first turn
-        env = RiichiEnv(seed=1483)
+        env = RiichiEnv(seed=42)
         env.reset()
-
-        # Riichi should be legal
+        # Manual setup for Tenpai (Shanpon wait)
+        # 123m, 456m, 789m, 2p(3), East(2) -> Discard 2p -> Wait 2p/East
+        # 1m: 0,1,2. 4m: 12,13,14. 7m: 24,25,26. 2p: 40,41,42. East: 108,109.
+        hands = env.hands
+        hands[0] = [0, 1, 2, 12, 13, 14, 24, 25, 26, 40, 41, 42, 108, 109]
+        env.hands = hands
         obs = env.get_observations([0])[0]
         legals = obs.legal_actions()
         riichi_actions = [a for a in legals if a.action_type == ActionType.Riichi]
-
-        # In case seed behavior changes with architecture/version, we assert logic locally
-        # If this fails, we need to find a new seed or fix the test logic
-        assert len(riichi_actions) > 0, "Seed 1483 did not provide Riichi opportunity"
+        assert len(riichi_actions) > 0, "Manual setup did not provide Riichi opportunity"
 
         # 1. Declare Riichi
         # Use the first available Riichi action (doesn't matter which tile is discarded later)
@@ -80,10 +80,12 @@ class TestRiichiMarker:
         """
         Verify that reset() clears the riichi markers.
         """
-        env = RiichiEnv(seed=1483)
+        env = RiichiEnv(seed=42)
         env.reset()
-
-        # P0 declares Riichi
+        # Manual setup for Tenpai
+        hands = env.hands
+        hands[0] = [0, 1, 2, 12, 13, 14, 24, 25, 26, 40, 41, 42, 108, 109]
+        env.hands = hands
         obs = env.get_observations([0])[0]
         legals = obs.legal_actions()
         riichi_actions = [a for a in legals if a.action_type == ActionType.Riichi]

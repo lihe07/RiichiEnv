@@ -1,4 +1,5 @@
 use pyo3::prelude::*;
+use serde::{Deserialize, Serialize};
 
 pub const TILE_MAX: usize = 34;
 
@@ -51,7 +52,7 @@ impl Default for Hand {
 }
 
 #[pyclass(eq, eq_int)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MeldType {
     Chi = 0,
     Peng = 1,
@@ -101,7 +102,7 @@ impl Wind {
 }
 
 #[pyclass]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Meld {
     #[pyo3(get, set)]
     pub meld_type: MeldType,
@@ -224,13 +225,15 @@ pub struct Agari {
     pub han: u32,
     #[pyo3(get, set)]
     pub fu: u32,
+    #[pyo3(get, set)]
+    pub pao_payer: Option<u8>,
 }
 
 #[pymethods]
 impl Agari {
     #[allow(clippy::too_many_arguments)]
     #[new]
-    #[pyo3(signature = (agari, yakuman=false, ron_agari=0, tsumo_agari_oya=0, tsumo_agari_ko=0, yaku=vec![], han=0, fu=0))]
+    #[pyo3(signature = (agari, yakuman=false, ron_agari=0, tsumo_agari_oya=0, tsumo_agari_ko=0, yaku=vec![], han=0, fu=0, pao_payer=None))]
     pub fn new(
         agari: bool,
         yakuman: bool,
@@ -240,6 +243,7 @@ impl Agari {
         yaku: Vec<u32>,
         han: u32,
         fu: u32,
+        pao_payer: Option<u8>,
     ) -> Self {
         Self {
             agari,
@@ -250,6 +254,7 @@ impl Agari {
             yaku,
             han,
             fu,
+            pao_payer,
         }
     }
 }

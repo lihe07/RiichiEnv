@@ -25,10 +25,10 @@ def helper_setup_env(
     if hands is not None:
         for player_id in range(4):
             player_hand = hands[player_id]
-            if player_hand:
+            if player_hand is not None:
                 h = env.hands
                 h[player_id] = player_hand
-                env.hands[player_id].sort()
+                h[player_id].sort()
                 env.hands = h
 
     if melds is not None:
