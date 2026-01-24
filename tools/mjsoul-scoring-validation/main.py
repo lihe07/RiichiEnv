@@ -14,7 +14,7 @@ TARGET_FILE_PATTERN = "/data/mahjong_game_record_4p_*/*.bin.xz"
 
 
 def iter_game_kyoku(paifu: Paifu) -> Iterator[Kyoku]:
-    game = MjSoulReplay.from_paifu(json.dumps(paifu.data))
+    game = MjSoulReplay.from_dict(paifu.data)
     for kyoku in game.take_kyokus():
         yield kyoku
 

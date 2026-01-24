@@ -179,8 +179,10 @@ impl MjSoulReplay {
     }
 
     #[staticmethod]
-    fn from_paifu(json_str: String) -> PyResult<Self> {
-        let rounds_raw: Vec<Vec<RawAction>> = serde_json::from_str(&json_str)
+    fn from_dict(py: Python, paifu: Py<PyAny>) -> PyResult<Self> {
+        let json = py.import("json")?;
+        let s: String = json.call_method1("dumps", (paifu,))?.extract()?;
+        let rounds_raw: Vec<Vec<RawAction>> = serde_json::from_str(&s)
             .map_err(|e| PyValueError::new_err(format!("Failed to parse JSON: {}", e)))?;
 
         let mut rounds = Vec::with_capacity(rounds_raw.len());

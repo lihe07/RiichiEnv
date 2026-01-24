@@ -9,6 +9,8 @@ from feature_encoder import FeatureEncoder
 from consts import *
 from grp_model import RewardPredictor
 
+import json
+
 class OfflineDataset(IterableDataset):
     def __init__(self, file_pattern: str, grp_model_path: str, device="cpu"):
         self.file_list = glob.glob(file_pattern)
@@ -26,7 +28,7 @@ class OfflineDataset(IterableDataset):
                 elif file_path.endswith('.json'):
                     with open(file_path, 'r') as f:
                         content = f.read()
-                    replay = MjSoulReplay.from_paifu(content)
+                    replay = MjSoulReplay.from_dict(json.loads(content))
                 else:
                     continue
                     
