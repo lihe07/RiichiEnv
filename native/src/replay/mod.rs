@@ -298,6 +298,7 @@ pub struct Kyoku {
     pub actions: Arc<[Action]>,
     #[pyo3(get)]
     pub rule: crate::rule::GameRule,
+    pub game_end_scores: Option<Vec<i32>>,
 }
 
 #[pymethods]
@@ -572,6 +573,73 @@ impl Kyoku {
         features.set_item("delta_scores", delta_scores)?;
 
         Ok(features.into())
+    }
+
+    fn take_grp_features(&self, py: Python) -> PyResult<Py<PyDict>> {
+        let dict = PyDict::new(py);
+
+        // Basic Integers
+        dict.set_item("chang", self.chang)?;
+        dict.set_item("ju", self.ju)?;
+        dict.set_item("ben", self.ben)?;
+        dict.set_item("liqibang", self.liqibang)?;
+
+        let initial_scores = &self.scores;
+        // Default to initial scores if end scores not populated (e.g. last round in some logs, or incomplete data)
+        let end_scores = if self.end_scores.is_empty() {
+            initial_scores
+        } else {
+            &self.end_scores
+        };
+
+        // Helper to calc ranks: 0..3 (0 is top)
+        fn get_ranks(scores: &[i32]) -> Vec<i32> {
+            let mut indexed: Vec<(usize, i32)> = scores.iter().copied().enumerate().collect();
+            // Sort descending by score. Then by seat index (lower seat index wins ties)
+            indexed.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+
+            let mut ranks = vec![0; 4];
+            for (rank, (seat, _)) in indexed.into_iter().enumerate() {
+                ranks[seat] = rank as i32;
+            }
+            ranks
+        }
+
+        let initial_ranks = get_ranks(initial_scores);
+        let end_ranks = get_ranks(end_scores);
+
+        let delta_scores: Vec<i32> = initial_scores
+            .iter()
+            .zip(end_scores.iter())
+            .map(|(s, e)| e - s)
+            .collect();
+        let delta_ranks: Vec<i32> = initial_ranks
+            .iter()
+            .zip(end_ranks.iter())
+            .map(|(s, e)| e - s)
+            .collect();
+
+        dict.set_item("round_initial_scores", initial_scores.clone())?;
+        dict.set_item("round_end_scores", end_scores.clone())?;
+        dict.set_item("round_delta_scores", delta_scores)?;
+
+        dict.set_item("round_initial_ranks", initial_ranks)?;
+        dict.set_item("round_end_ranks", end_ranks.clone())?;
+        dict.set_item("round_delta_ranks", delta_ranks)?;
+
+        if let Some(final_scores) = &self.game_end_scores {
+            let final_ranks = get_ranks(final_scores);
+            dict.set_item("final_ranks", final_ranks)?;
+        } else {
+            dict.set_item("final_ranks", end_ranks)?;
+        }
+
+        for (i, hand) in self.hands.iter().enumerate() {
+            let hand_u32: Vec<u32> = hand.iter().map(|&x| x as u32).collect();
+            dict.set_item(format!("player{}_initial_hand_tids", i), hand_u32)?;
+        }
+
+        Ok(dict.into())
     }
 }
 

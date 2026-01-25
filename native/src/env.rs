@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 use pyo3::IntoPyObject;
 use std::collections::HashMap;
 
-use crate::action::{Action, ActionType, Phase};
+use crate::action::{Action, Phase};
 use crate::observation::Observation;
 use crate::replay::MjaiEvent;
 use crate::rule::GameRule;

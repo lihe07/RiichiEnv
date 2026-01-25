@@ -219,6 +219,49 @@ impl MjSoulReplay {
             rounds[i].end_scores = rounds[i + 1].scores.clone();
         }
 
+        // Calculate game end scores using the last round
+        let game_end_scores = if let Some(last) = rounds.last_mut() {
+            // Simulate last round to get end_scores
+            let mut state = crate::state::GameState::new(0, false, None, 0, last.rule.clone());
+
+            let initial_scores: [i32; 4] = last.scores.clone().try_into().unwrap_or([25000; 4]);
+            let oya = (last.ju % 4) as u8;
+            let bakaze = match last.chang {
+                0 => crate::types::Wind::East,
+                1 => crate::types::Wind::South,
+                2 => crate::types::Wind::West,
+                3 => crate::types::Wind::North,
+                _ => crate::types::Wind::East,
+            } as u8;
+
+            state._initialize_round(
+                oya,
+                bakaze,
+                last.ben,
+                last.liqibang as u32,
+                None, // No left tile count override needed for score calc
+                Some(initial_scores),
+            );
+
+            // Apply all actions
+            for action in last.actions.iter() {
+                state.apply_log_action(action);
+            }
+
+            // Update last round's end scores
+            last.end_scores = state.scores.to_vec();
+            Some(state.scores.to_vec())
+        } else {
+            None
+        };
+
+        // Set game_end_scores for all rounds
+        if let Some(ges) = game_end_scores {
+            for r in &mut rounds {
+                r.game_end_scores = Some(ges.clone());
+            }
+        }
+
         Ok(MjSoulReplay { rounds })
     }
 
@@ -420,6 +463,7 @@ impl MjSoulReplay {
             paishan,
             actions: Arc::from(actions),
             rule: crate::rule::GameRule::default_mjsoul(),
+            game_end_scores: None,
         }
     }
 
