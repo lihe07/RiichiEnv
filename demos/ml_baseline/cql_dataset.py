@@ -99,6 +99,8 @@ class MCDataset(BaseDataset):
 
                         mask_bytes = obs.mask()
                         mask = np.frombuffer(mask_bytes, dtype=np.uint8).copy()
+                        assert 0 <= action_id < mask.shape[0], f"action_id should be in [0, {mask.shape[0]})"
+                        assert mask[action_id] == 1, f"action_id {action_id} should be legal"
                         trajectory.append((features, action_id, mask))
 
                     # Compute Returns
