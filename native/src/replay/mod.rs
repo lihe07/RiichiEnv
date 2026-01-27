@@ -7,12 +7,14 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods};
 use std::sync::Arc;
 
+use crate::action::Action as EnvAction;
 use crate::agari_calculator::AgariCalculator;
 use crate::types::{Agari, Conditions, Meld, MeldType};
 
 pub mod mjai_replay;
 pub mod mjsoul_replay;
 
+pub use mjai_replay::MjaiEvent;
 pub use mjai_replay::MjaiReplay;
 pub use mjsoul_replay::MjSoulReplay;
 
@@ -75,6 +77,210 @@ pub struct HuleData {
 }
 
 #[pyclass]
+pub struct KyokuStepIterator {
+    state: crate::state::GameState,
+    actions: Arc<[Action]>,
+    idx: usize,
+    pending_action: Option<(u8, EnvAction)>,
+    filter_seat: Option<u8>,
+}
+
+#[pymethods]
+impl KyokuStepIterator {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<Py<PyAny>>> {
+        let actions = slf.actions.clone();
+
+        loop {
+            if let Some((pid, action)) = slf.pending_action.take() {
+                let obs = slf.state.get_observation(pid);
+                let current_log_action = &actions[slf.idx];
+                slf.state.apply_log_action(current_log_action);
+                slf.idx += 1;
+
+                if let Some(target) = slf.filter_seat {
+                    if pid == target {
+                        let py = slf.py();
+                        return Ok(Some((obs, action).into_pyobject(py)?.unbind().into()));
+                    }
+                    continue;
+                } else {
+                    let py = slf.py();
+                    return Ok(Some((pid, obs, action).into_pyobject(py)?.unbind().into()));
+                }
+            }
+
+            if slf.idx >= actions.len() {
+                return Ok(None);
+            }
+
+            let action = &actions[slf.idx];
+            match action {
+                Action::DealTile { .. }
+                | Action::Dora { .. }
+                | Action::NoTile
+                | Action::LiuJu { .. } => {
+                    slf.state.apply_log_action(action);
+                    slf.idx += 1;
+                }
+                Action::Other(_) => {
+                    slf.idx += 1;
+                }
+                Action::DiscardTile {
+                    seat,
+                    tile,
+                    is_liqi,
+                    ..
+                } => {
+                    let pid = *seat as u8;
+                    let obs = slf.state.get_observation(pid);
+
+                    if *is_liqi {
+                        let riichi_action =
+                            EnvAction::new(crate::action::ActionType::Riichi, None, Vec::new());
+                        let discard_action = EnvAction::new(
+                            crate::action::ActionType::Discard,
+                            Some(*tile),
+                            Vec::new(),
+                        );
+                        slf.pending_action = Some((pid, discard_action));
+                        slf.state.riichi_declared[pid as usize] = true;
+
+                        if let Some(target) = slf.filter_seat {
+                            if pid == target {
+                                let py = slf.py();
+                                return Ok(Some(
+                                    (obs, riichi_action).into_pyobject(py)?.unbind().into(),
+                                ));
+                            }
+                            // continue loop to next iteration/pending action logic
+                        } else {
+                            let py = slf.py();
+                            return Ok(Some(
+                                (pid, obs, riichi_action).into_pyobject(py)?.unbind().into(),
+                            ));
+                        }
+                    } else {
+                        let env_action = EnvAction::new(
+                            crate::action::ActionType::Discard,
+                            Some(*tile),
+                            Vec::new(),
+                        );
+                        slf.state.apply_log_action(action);
+                        slf.idx += 1;
+
+                        if let Some(target) = slf.filter_seat {
+                            if pid == target {
+                                let py = slf.py();
+                                return Ok(Some(
+                                    (obs, env_action).into_pyobject(py)?.unbind().into(),
+                                ));
+                            }
+                        } else {
+                            let py = slf.py();
+                            return Ok(Some(
+                                (pid, obs, env_action).into_pyobject(py)?.unbind().into(),
+                            ));
+                        }
+                    }
+                }
+                Action::ChiPengGang {
+                    seat,
+                    meld_type,
+                    tiles,
+                    ..
+                } => {
+                    let pid = *seat as u8;
+                    let obs = slf.state.get_observation(pid);
+                    let env_action_type = match meld_type {
+                        MeldType::Chi => crate::action::ActionType::Chi,
+                        MeldType::Peng => crate::action::ActionType::Pon,
+                        MeldType::Gang => crate::action::ActionType::Daiminkan,
+                        _ => crate::action::ActionType::Chi,
+                    };
+
+                    let t = tiles.first().copied();
+                    let env_action = EnvAction::new(env_action_type, t, tiles.to_vec());
+
+                    slf.state.apply_log_action(action);
+                    slf.idx += 1;
+
+                    if let Some(target) = slf.filter_seat {
+                        if pid == target {
+                            let py = slf.py();
+                            return Ok(Some((obs, env_action).into_pyobject(py)?.unbind().into()));
+                        }
+                    } else {
+                        let py = slf.py();
+                        return Ok(Some(
+                            (pid, obs, env_action).into_pyobject(py)?.unbind().into(),
+                        ));
+                    }
+                }
+                Action::AnGangAddGang {
+                    seat,
+                    meld_type,
+                    tiles,
+                    ..
+                } => {
+                    let pid = *seat as u8;
+                    let obs = slf.state.get_observation(pid);
+                    let atype = match meld_type {
+                        MeldType::Angang => crate::action::ActionType::Ankan,
+                        MeldType::Addgang => crate::action::ActionType::Kakan,
+                        _ => crate::action::ActionType::Ankan,
+                    };
+                    let tile = tiles.first().copied();
+                    let env_action = EnvAction::new(atype, tile, tiles.to_vec());
+                    slf.state.apply_log_action(action);
+                    slf.idx += 1;
+
+                    if let Some(target) = slf.filter_seat {
+                        if pid == target {
+                            let py = slf.py();
+                            return Ok(Some((obs, env_action).into_pyobject(py)?.unbind().into()));
+                        }
+                    } else {
+                        let py = slf.py();
+                        return Ok(Some(
+                            (pid, obs, env_action).into_pyobject(py)?.unbind().into(),
+                        ));
+                    }
+                }
+                Action::Hule { hules } => {
+                    let first = &hules[0];
+                    let pid = first.seat as u8;
+                    let obs = slf.state.get_observation(pid);
+                    let atype = if first.zimo {
+                        crate::action::ActionType::Tsumo
+                    } else {
+                        crate::action::ActionType::Ron
+                    };
+                    let env_action = EnvAction::new(atype, None, Vec::new());
+                    slf.state.apply_log_action(action);
+                    slf.idx += 1;
+
+                    if let Some(target) = slf.filter_seat {
+                        if pid == target {
+                            let py = slf.py();
+                            return Ok(Some((obs, env_action).into_pyobject(py)?.unbind().into()));
+                        }
+                    } else {
+                        let py = slf.py();
+                        return Ok(Some(
+                            (pid, obs, env_action).into_pyobject(py)?.unbind().into(),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[pyclass]
 #[derive(Clone)]
 pub struct Kyoku {
     pub scores: Vec<i32>,
@@ -90,12 +296,58 @@ pub struct Kyoku {
     pub wliqi: Vec<bool>,
     pub paishan: Option<String>,
     pub actions: Arc<[Action]>,
+    #[pyo3(get)]
+    pub rule: crate::rule::GameRule,
+    pub game_end_scores: Option<Vec<i32>>,
 }
 
 #[pymethods]
 impl Kyoku {
     fn take_agari_contexts(&self) -> PyResult<AgariContextIterator> {
         Ok(AgariContextIterator::new(self.clone()))
+    }
+
+    #[pyo3(signature = (seat=None, rule=None))]
+    fn steps(
+        &self,
+        seat: Option<u8>,
+        rule: Option<crate::rule::GameRule>,
+    ) -> PyResult<KyokuStepIterator> {
+        let rule = rule.unwrap_or(self.rule);
+        let mut state = crate::state::GameState::new(0, false, None, 0, rule);
+
+        // Initialize state from Kyoku data
+        let initial_scores: [i32; 4] = self.scores.clone().try_into().unwrap_or([25000; 4]);
+        let doras = self.doras.clone();
+
+        let oya = self.ju % 4;
+        let bakaze = match self.chang {
+            0 => crate::types::Wind::East,
+            1 => crate::types::Wind::South,
+            2 => crate::types::Wind::West,
+            3 => crate::types::Wind::North,
+            _ => crate::types::Wind::East,
+        } as u8;
+
+        state._initialize_round(
+            oya,
+            bakaze,
+            self.ben,
+            self.liqibang as u32,
+            None,
+            Some(initial_scores),
+        );
+
+        state.hands = self.hands.clone().try_into().unwrap_or_default();
+        state.dora_indicators = doras;
+
+        Ok(KyokuStepIterator {
+            state,
+            actions: self.actions.clone(),
+            idx: 0,
+            pending_action: None,
+            filter_seat: seat,
+        })
     }
 
     fn events(&self, py: Python) -> PyResult<Py<PyAny>> {
@@ -321,6 +573,73 @@ impl Kyoku {
         features.set_item("delta_scores", delta_scores)?;
 
         Ok(features.into())
+    }
+
+    fn take_grp_features(&self, py: Python) -> PyResult<Py<PyDict>> {
+        let dict = PyDict::new(py);
+
+        // Basic Integers
+        dict.set_item("chang", self.chang)?;
+        dict.set_item("ju", self.ju)?;
+        dict.set_item("ben", self.ben)?;
+        dict.set_item("liqibang", self.liqibang)?;
+
+        let initial_scores = &self.scores;
+        // Default to initial scores if end scores not populated (e.g. last round in some logs, or incomplete data)
+        let end_scores = if self.end_scores.is_empty() {
+            initial_scores
+        } else {
+            &self.end_scores
+        };
+
+        // Helper to calc ranks: 0..3 (0 is top)
+        fn get_ranks(scores: &[i32]) -> Vec<i32> {
+            let mut indexed: Vec<(usize, i32)> = scores.iter().copied().enumerate().collect();
+            // Sort descending by score. Then by seat index (lower seat index wins ties)
+            indexed.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+
+            let mut ranks = vec![0; 4];
+            for (rank, (seat, _)) in indexed.into_iter().enumerate() {
+                ranks[seat] = rank as i32;
+            }
+            ranks
+        }
+
+        let initial_ranks = get_ranks(initial_scores);
+        let end_ranks = get_ranks(end_scores);
+
+        let delta_scores: Vec<i32> = initial_scores
+            .iter()
+            .zip(end_scores.iter())
+            .map(|(s, e)| e - s)
+            .collect();
+        let delta_ranks: Vec<i32> = initial_ranks
+            .iter()
+            .zip(end_ranks.iter())
+            .map(|(s, e)| e - s)
+            .collect();
+
+        dict.set_item("round_initial_scores", initial_scores.clone())?;
+        dict.set_item("round_end_scores", end_scores.clone())?;
+        dict.set_item("round_delta_scores", delta_scores)?;
+
+        dict.set_item("round_initial_ranks", initial_ranks)?;
+        dict.set_item("round_end_ranks", end_ranks.clone())?;
+        dict.set_item("round_delta_ranks", delta_ranks)?;
+
+        if let Some(final_scores) = &self.game_end_scores {
+            let final_ranks = get_ranks(final_scores);
+            dict.set_item("final_ranks", final_ranks)?;
+        } else {
+            dict.set_item("final_ranks", end_ranks)?;
+        }
+
+        for (i, hand) in self.hands.iter().enumerate() {
+            let hand_u32: Vec<u32> = hand.iter().map(|&x| x as u32).collect();
+            dict.set_item(format!("player{}_initial_hand_tids", i), hand_u32)?;
+        }
+
+        Ok(dict.into())
     }
 }
 

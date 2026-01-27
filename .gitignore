@@ -4,3 +4,5 @@
 target
 **/.python-version
 trunk
+**/wandb
+**/.env

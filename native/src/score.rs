@@ -14,9 +14,8 @@ pub struct Score {
 }
 
 #[pyfunction]
-pub fn calculate_score(han: u8, fu: u8, is_oya: bool, is_tsumo: bool) -> Score {
-    if han >= 5 {
-        // ... (rest logic same)
+pub fn calculate_score(han: u8, fu: u8, is_oya: bool, is_tsumo: bool, tsumi: u32) -> Score {
+    let mut s = if han >= 5 {
         let base_points = match han {
             5 => 2000,                     // Mangan
             6 | 7 => 3000,                 // Haneman
@@ -33,11 +32,21 @@ pub fn calculate_score(han: u8, fu: u8, is_oya: bool, is_tsumo: bool) -> Score {
         } else {
             make_score_result(bp, is_oya, is_tsumo)
         }
+    };
+
+    // Add Honba (300 per honba stack)
+    if is_tsumo {
+        s.pay_tsumo_oya += tsumi * 100;
+        s.pay_tsumo_ko += tsumi * 100;
+        s.total += tsumi * 300;
+    } else {
+        s.pay_ron += tsumi * 300;
+        s.total += tsumi * 300;
     }
+    s
 }
 
 fn make_score_result(base_points: u32, is_oya: bool, is_tsumo: bool) -> Score {
-    // Logic reuse ...
     let total_ron = if is_oya {
         ceil_100(base_points * 6)
     } else {
@@ -45,10 +54,8 @@ fn make_score_result(base_points: u32, is_oya: bool, is_tsumo: bool) -> Score {
     };
 
     let (pay_oya, pay_ko) = if is_oya {
-        // Oya Tsumo: all ko pay 2 * base
         (0, ceil_100(base_points * 2))
     } else {
-        // Ko Tsumo: oya pays 2 * base, ko pays 1 * base
         (ceil_100(base_points * 2), ceil_100(base_points))
     };
 

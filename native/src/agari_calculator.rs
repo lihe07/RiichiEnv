@@ -23,6 +23,13 @@ impl AgariCalculator {
     #[new]
     #[pyo3(signature = (tiles_136, melds=vec![]))]
     pub fn new(tiles_136: Vec<u8>, melds: Vec<Meld>) -> Self {
+        if tiles_136.len() == 13 || tiles_136.len() == 14 {
+            // println!(
+            //     "DEBUG: AgariCalculator::new len={} tiles={:?}",
+            //     tiles_136.len(),
+            //     tiles_136
+            // );
+        }
         let mut aka_dora_count = 0;
         let mut tiles_34 = Vec::with_capacity(tiles_136.len());
 
@@ -115,7 +122,7 @@ impl AgariCalculator {
         let is_agari = agari::is_agari(&mut hand_14);
 
         if !is_agari {
-            return Agari::new(false, false, 0, 0, 0, vec![], 0, 0);
+            return Agari::new(false, false, 0, 0, 0, vec![], 0, 0, None);
         }
 
         // Count normal doras in 14-tile hand
@@ -160,22 +167,35 @@ impl AgariCalculator {
         let yaku_res = yaku::calculate_yaku(&hand_14, &self.melds, &ctx, win_tile_34);
 
         let is_oya = conditions.player_wind == Wind::East;
-        let score_res = score::calculate_score(yaku_res.han, yaku_res.fu, is_oya, conditions.tsumo);
+        let score_res = score::calculate_score(
+            yaku_res.han,
+            yaku_res.fu,
+            is_oya,
+            conditions.tsumo,
+            conditions.tsumi,
+        );
 
         let has_yaku = yaku_res
             .yaku_ids
             .iter()
             .any(|&id| id != yaku::ID_DORA && id != yaku::ID_AKADORA && id != yaku::ID_URADORA);
 
+        let official_yaku: Vec<u32> = yaku_res
+            .yaku_ids
+            .into_iter()
+            .filter(|&id| id != yaku::ID_DORA && id != yaku::ID_URADORA)
+            .collect();
+
         Agari {
-            agari: (has_yaku || yaku_res.yakuman_count > 0) && yaku_res.han >= 1, // Ensure at least 1 han even if just from Yaku (implicit)
+            agari: (has_yaku || yaku_res.yakuman_count > 0) && yaku_res.han >= 1,
             yakuman: yaku_res.yakuman_count > 0,
             ron_agari: score_res.pay_ron,
             tsumo_agari_oya: score_res.pay_tsumo_oya,
             tsumo_agari_ko: score_res.pay_tsumo_ko,
-            yaku: yaku_res.yaku_ids,
+            yaku: official_yaku,
             han: yaku_res.han as u32,
             fu: yaku_res.fu as u32,
+            pao_payer: None,
         }
     }
 

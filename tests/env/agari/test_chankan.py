@@ -104,7 +104,7 @@ class TestChankan:
         """
         rule = GameRule.default_mjsoul()
 
-        env = RiichiEnv(seed=42, game_mode=1, rule=rule)
+        env = RiichiEnv(seed=42, game_mode=0, rule=rule)
         env.reset()
 
         # Player 0: Performs ANKAN of 1z (East)

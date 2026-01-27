@@ -30,10 +30,36 @@ class TestActionToMjaiFormat:
         ]
 
         player_id = 0
-        hand = []
-        events_json = []
-        prev_events_size = 0
-        obs = Observation(player_id, hand, events_json, prev_events_size, legal_actions)
+        hands = [[] for _ in range(4)]
+        melds = [[] for _ in range(4)]
+        discards = [[] for _ in range(4)]
+        dora_indicators = []
+        scores = [25000] * 4
+        riichi_declared = [False] * 4
+        events = []
+        honba = 0
+        riichi_sticks = 0
+        round_wind = 0
+        oya = 0
+
+        obs = Observation(
+            player_id,
+            hands,
+            melds,
+            discards,
+            dora_indicators,
+            scores,
+            riichi_declared,
+            legal_actions,
+            events,
+            honba,
+            riichi_sticks,
+            round_wind,
+            oya,
+            0,  # kyoku_index
+            [],  # waits
+            False,  # is_tenpai
+        )
 
         mjai_dict = {"type": "dahai", "pai": "5p"}
         selected = obs.select_action_from_mjai(mjai_dict)

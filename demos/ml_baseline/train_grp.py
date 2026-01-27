@@ -16,7 +16,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
-from grp_dataloader import RankPredictorDataset
+from grp_dataset import RankPredictorDataset
 from grp_model import RankPredictor, RewardPredictor
 from utils import AverageMeter
 
@@ -39,7 +39,7 @@ class Trainer:
             self.val_dataloader = DataLoader(self.val_dataset, batch_size=128, shuffle=False, num_workers=12, pin_memory=True)
 
     def train(self, n_epochs: int = 10) -> None:
-        model = RankPredictor().to(self.device)
+        model = RankPredictor(input_dim=20).to(self.device)
         optimizer = optim.Adam(model.parameters(), lr=5e-4)
         scheduler = CosineAnnealingLR(optimizer, T_max=n_epochs * len(self.train_dataloader), eta_min=1e-7)
         criterion = nn.CrossEntropyLoss()
@@ -137,11 +137,11 @@ def check_reward_predictions() -> None:
     device_str = "cuda"
     device = torch.device(device_str)
 
-    rp = RewardPredictor("grp_model.pth", point_weights, device=device_str)
+    rp = RewardPredictor("grp_model.pth", point_weights, device=device_str, input_dim=20)
     _, kyoku_rewards = rp.calc_pts_rewards(kyoku_features, player_idx)
     print(kyoku_rewards)
 
 
 if __name__ == "__main__":
     main()
-    check_reward_predictions()
+    # check_reward_predictions()

@@ -7,10 +7,13 @@ mod tests;
 mod types;
 mod yaku;
 
+mod action;
 mod env;
+mod observation;
 mod parser;
 mod replay;
 mod rule;
+mod state;
 
 #[pyfunction]
 fn check_riichi_candidates(tiles_136: Vec<u8>) -> Vec<u32> {
@@ -63,13 +66,14 @@ fn _riichienv(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<replay::mjsoul_replay::KyokuIterator>()?;
     m.add_class::<replay::AgariContext>()?;
     m.add_class::<replay::AgariContextIterator>()?;
+    m.add_class::<rule::KuikaeMode>()?;
     m.add_class::<rule::GameRule>()?;
 
     // Env classes
-    m.add_class::<env::ActionType>()?;
-    m.add_class::<env::Phase>()?;
-    m.add_class::<env::Action>()?;
-    m.add_class::<env::Observation>()?;
+    m.add_class::<action::ActionType>()?;
+    m.add_class::<action::Phase>()?;
+    m.add_class::<action::Action>()?;
+    m.add_class::<observation::Observation>()?;
     m.add_class::<env::RiichiEnv>()?;
 
     m.add_function(wrap_pyfunction!(score::calculate_score, m)?)?;

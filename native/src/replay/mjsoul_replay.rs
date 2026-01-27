@@ -179,18 +179,87 @@ impl MjSoulReplay {
     }
 
     #[staticmethod]
-    fn from_paifu(json_str: String) -> PyResult<Self> {
-        let rounds_raw: Vec<Vec<RawAction>> = serde_json::from_str(&json_str)
+    fn from_dict(py: Python, paifu: Py<PyAny>) -> PyResult<Self> {
+        let json = py.import("json")?;
+        let s: String = json.call_method1("dumps", (paifu,))?.extract()?;
+        let v: serde_json::Value = serde_json::from_str(&s)
             .map_err(|e| PyValueError::new_err(format!("Failed to parse JSON: {}", e)))?;
+
+        let (rounds_raw, _rule) = if let Some(obj) = v.as_object() {
+            if let Some(data) = obj.get("data") {
+                // assume Paifu struct { header, data }
+                let rounds: Vec<Vec<RawAction>> = serde_json::from_value(data.clone())
+                    .map_err(|e| PyValueError::new_err(format!("Failed to parse rounds: {}", e)))?;
+                // TODO: Parse header for rule if converting from Paifu
+                (rounds, crate::rule::GameRule::default_mjsoul())
+            } else {
+                // maybe just dict of rounds? Unlikely given usage.
+                return Err(PyValueError::new_err("Invalid dict format: missing 'data'"));
+            }
+        } else if v.is_array() {
+            let rounds: Vec<Vec<RawAction>> = serde_json::from_value(v).map_err(|e| {
+                PyValueError::new_err(format!("Failed to parse rounds list: {}", e))
+            })?;
+            (rounds, crate::rule::GameRule::default_mjsoul())
+        } else {
+            return Err(PyValueError::new_err(
+                "Invalid input format: expected dict or list",
+            ));
+        };
 
         let mut rounds = Vec::with_capacity(rounds_raw.len());
         for r_raw in rounds_raw {
-            rounds.push(Self::kyoku_from_raw_actions(r_raw));
+            let mut kyoku = Self::kyoku_from_raw_actions(r_raw);
+            kyoku.rule = _rule;
+            rounds.push(kyoku);
         }
 
         // Populate end_scores based on next round's start scores
         for i in 0..rounds.len().saturating_sub(1) {
             rounds[i].end_scores = rounds[i + 1].scores.clone();
+        }
+
+        // Calculate game end scores using the last round
+        let game_end_scores = if let Some(last) = rounds.last_mut() {
+            // Simulate last round to get end_scores
+            let mut state = crate::state::GameState::new(0, false, None, 0, last.rule);
+
+            let initial_scores: [i32; 4] = last.scores.clone().try_into().unwrap_or([25000; 4]);
+            let oya = last.ju % 4;
+            let bakaze = match last.chang {
+                0 => crate::types::Wind::East,
+                1 => crate::types::Wind::South,
+                2 => crate::types::Wind::West,
+                3 => crate::types::Wind::North,
+                _ => crate::types::Wind::East,
+            } as u8;
+
+            state._initialize_round(
+                oya,
+                bakaze,
+                last.ben,
+                last.liqibang as u32,
+                None, // No left tile count override needed for score calc
+                Some(initial_scores),
+            );
+
+            // Apply all actions
+            for action in last.actions.iter() {
+                state.apply_log_action(action);
+            }
+
+            // Update last round's end scores
+            last.end_scores = state.scores.to_vec();
+            Some(state.scores.to_vec())
+        } else {
+            None
+        };
+
+        // Set game_end_scores for all rounds
+        if let Some(ges) = game_end_scores {
+            for r in &mut rounds {
+                r.game_end_scores = Some(ges.clone());
+            }
         }
 
         Ok(MjSoulReplay { rounds })
@@ -393,6 +462,8 @@ impl MjSoulReplay {
             wliqi,
             paishan,
             actions: Arc::from(actions),
+            rule: crate::rule::GameRule::default_mjsoul(),
+            game_end_scores: None,
         }
     }
 

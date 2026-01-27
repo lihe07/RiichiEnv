@@ -57,7 +57,7 @@ class TestRiichiScoring:
 
         env.drawn_tile = 14
         env.current_player = 0
-        env.turn_count = 1  # Avoid Tenhou/Renhou checks
+        env.is_first_turn = False  # Avoid Tenhou/Renhou checks
         d = env.discards
         d[0].append(0)
         env.discards = d
@@ -130,7 +130,7 @@ class TestRiichiScoring:
         # Draw pair match
         env.drawn_tile = 14  # 4m
         env.current_player = 0
-        env.turn_count = 1  # Avoid Tenhou (Turn check)
+        env.is_first_turn = False  # Avoid Tenhou (Turn check)
         d = env.discards
         d[0].append(0)
         env.discards = d  # Reassign for PyO3

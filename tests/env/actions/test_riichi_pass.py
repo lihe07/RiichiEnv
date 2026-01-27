@@ -43,7 +43,9 @@ class TestRiichiPassAction:
 
         act = Action(ActionType.Discard, 10)
         obs = env.step({player_id: act})
-        assert 1 in obs, "Should be player 1's turn. Ensure the game has not been aborted."
+        assert 1 in obs, (
+            f"Should be player 1's turn. Keys: {list(obs.keys())}. Phase: {env.phase}, Active: {env.active_players}"
+        )
         assert env.phase == Phase.WaitAct
         assert env.current_player == 1
         assert env.last_discard == (0, 10)

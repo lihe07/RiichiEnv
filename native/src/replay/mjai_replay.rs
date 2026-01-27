@@ -222,6 +222,8 @@ impl KyokuBuilder {
             wliqi: self.wliqi_flags,
             paishan: None, // MJAI usually doesn't have full paishan
             actions: Arc::from(self.actions),
+            rule: crate::rule::GameRule::default_tenhou(),
+            game_end_scores: None,
         }
     }
 }
