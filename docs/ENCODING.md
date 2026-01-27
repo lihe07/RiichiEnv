@@ -2,9 +2,9 @@
 
 This document describes the mapping between `Action` objects and integer IDs used for model training and inference in RiichiEnv.
 
-## Action Space (Unified)
+## Action Space
 
-The action space consists of **82** distinct actions (IDs 0-81). This unified space allows for single-sample training/inference, unlike some other implementations that may split actions like Kan into multiple steps.
+The action space consists of **82** distinct actions (IDs 0-81).
 
 | Action ID | Action Type | Description |
 | :--- | :--- | :--- |

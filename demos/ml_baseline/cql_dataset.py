@@ -1,13 +1,12 @@
 import glob
 import lzma
 import random
-from pathlib import Path
 
 import numpy as np
 import torch
 from torch.utils.data import IterableDataset
 
-from riichienv import MjSoulReplay, Kyoku
+from riichienv import MjSoulReplay
 from mjsoul_parser.parse import MjsoulPaifuParser
 
 

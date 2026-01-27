@@ -1,19 +1,17 @@
 import argparse
 import glob
-import os
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
-import numpy as np
 
 import wandb
 from dotenv import load_dotenv
 load_dotenv()
 
-from cql_dataset import MCDataset, TransitionDataset
+from cql_dataset import MCDataset
 from cql_model import QNetwork
 from grp_model import RewardPredictor
 from utils import AverageMeter
@@ -89,8 +87,6 @@ def train(args):
         for i, batch in enumerate(dataloader):
             # (feat, act, return, mask)
             features, actions, targets, masks = batch
-            next_features = None
-            dones = None
             # targets is G_t
 
             features = features.to(device)
