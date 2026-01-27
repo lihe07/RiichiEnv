@@ -33,7 +33,7 @@ impl Default for GameRule {
 #[pymethods]
 impl GameRule {
     #[new]
-    #[pyo3(signature = (allows_ron_on_ankan_for_kokushi_musou=false, is_kokushi_musou_13machi_double=false, yakuman_pao_is_liability_only=false, allow_double_ron=true, kuikae_mode=KuikaeMode::None))]
+    #[pyo3(signature = (allows_ron_on_ankan_for_kokushi_musou=false, is_kokushi_musou_13machi_double=false, yakuman_pao_is_liability_only=false, allow_double_ron=true, kuikae_mode=KuikaeMode::StrictFlank))]
     pub fn new(
         allows_ron_on_ankan_for_kokushi_musou: bool,
         is_kokushi_musou_13machi_double: bool,
@@ -46,7 +46,7 @@ impl GameRule {
             is_kokushi_musou_13machi_double,
             yakuman_pao_is_liability_only,
             allow_double_ron,
-            kuikae_mode: kuikae_mode.unwrap_or(KuikaeMode::None),
+            kuikae_mode: kuikae_mode.unwrap_or(KuikaeMode::StrictFlank),
         }
     }
 

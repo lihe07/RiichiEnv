@@ -1,6 +1,12 @@
 from enum import IntEnum
 from typing import Any
 
+class KuikaeMode(IntEnum):
+    None_ = 0
+    Basic = 1
+    StrictFlank = 2
+    def __int__(self) -> int: ...
+
 class GameRule:
     allows_ron_on_ankan_for_kokushi_musou: bool
     is_kokushi_musou_13machi_double: bool
@@ -8,6 +14,9 @@ class GameRule:
         self,
         allows_ron_on_ankan_for_kokushi_musou: bool = False,
         is_kokushi_musou_13machi_double: bool = False,
+        yakuman_pao_is_liability_only: bool = False,
+        allow_double_ron: bool = True,
+        kuikae_mode: KuikaeMode = KuikaeMode.None_,
     ) -> None: ...
     @staticmethod
     def default_tenhou() -> GameRule: ...
@@ -307,4 +316,5 @@ __all__ = [
     "check_riichi_candidates",
     "parse_hand",
     "parse_tile",
+    "KuikaeMode",
 ]

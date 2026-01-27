@@ -66,6 +66,7 @@ fn _riichienv(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<replay::mjsoul_replay::KyokuIterator>()?;
     m.add_class::<replay::AgariContext>()?;
     m.add_class::<replay::AgariContextIterator>()?;
+    m.add_class::<rule::KuikaeMode>()?;
     m.add_class::<rule::GameRule>()?;
 
     // Env classes
