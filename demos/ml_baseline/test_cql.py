@@ -27,6 +27,10 @@ class CQLAgent:
                 if legal_action.encode() == action_selected:
                     found_action = legal_action
                     break
+            if found_action is None:
+                raise ValueError(
+                    f"No legal action found for selected action id {action_selected}"
+                )
             return found_action
 
 
