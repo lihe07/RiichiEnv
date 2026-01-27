@@ -499,7 +499,7 @@ impl Observation {
         let slice = arr.as_slice().ok_or_else(|| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>("Array not contiguous")
         })?;
-        let byte_len = slice.len() * std::mem::size_of::<f32>();
+        let byte_len = std::mem::size_of_val(slice);
         let byte_slice =
             unsafe { std::slice::from_raw_parts(slice.as_ptr() as *const u8, byte_len) };
         Ok(pyo3::types::PyBytes::new(py, byte_slice))
