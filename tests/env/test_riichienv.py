@@ -59,7 +59,6 @@ class TestRiichiEnv:
         assert obs_data["legal_actions"][0]["consume_tiles"] == []
 
         # Verification of MJAI selection (flexible enough)
-
         mjai_tile = tid_to_mjai(first_dealer_obs.hand[0])
         some_mjai = {"type": "dahai", "pai": mjai_tile, "actor": 0}
         assert first_dealer_obs.select_action_from_mjai(some_mjai) is not None
@@ -144,8 +143,16 @@ class TestRiichiEnv:
         assert len(initial_events) == 3
         assert json.loads(initial_events[2])["pai"] != "?"
 
+        # Helper to collect P0 events
+        def collect_p0(obs_d, events_list):
+            if 0 in obs_d:
+                events_list.extend([json.loads(ev) for ev in obs_d[0].new_events()])
+
+        p0_events = []
+
         p0_tile = p0_obs.hand[0]
         obs_dict = env.step({0: Action(ActionType.Discard, tile=p0_tile)})
+        collect_p0(obs_dict, p0_events)
 
         assert env.phase == Phase.WaitAct
         assert 1 in obs_dict
@@ -168,18 +175,17 @@ class TestRiichiEnv:
 
             discard_tile = obs.hand[0]
             obs_dict = env.step({pid: Action(ActionType.Discard, tile=discard_tile)})
+            collect_p0(obs_dict, p0_events)
 
             if env.phase == Phase.WaitResponse:
                 obs_dict = env.step({pid: Action(ActionType.Pass) for pid in env.active_players})
+                collect_p0(obs_dict, p0_events)
 
         assert env.phase == Phase.WaitAct
         assert 0 in obs_dict
         assert 3 not in obs_dict
 
-        if 0 in obs_dict:
-            p0_new = [json.loads(ev) for ev in obs_dict[0].new_events()]
-        else:
-            p0_new = []
+        p0_new = p0_events
 
         # Check new events from p0_obs
         # Sequence:
