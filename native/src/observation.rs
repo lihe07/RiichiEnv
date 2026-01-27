@@ -49,6 +49,7 @@ pub struct Observation {
 #[pymethods]
 impl Observation {
     #[new]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         player_id: u8,
         hands: Vec<Vec<u8>>,
@@ -131,15 +132,34 @@ impl Observation {
                 v["type"].as_str()?.to_string(),
                 v["pai"].as_str().unwrap_or("").to_string(),
             )
-        } else if let Ok(dict) = mjai_data.downcast::<PyDict>() {
-            let t = dict.get_item("type").ok()??.extract::<String>().ok()?;
-            let p = dict
-                .get_item("pai")
+        } else if let Ok(dict) = mjai_data.cast::<PyDict>() {
+            let type_str: String = dict
+                .get_item("type")
                 .ok()
                 .flatten()
                 .and_then(|x| x.extract::<String>().ok())
                 .unwrap_or_default();
-            (t, p)
+            let _args_list: Vec<String> = dict
+                .get_item("args")
+                .ok()
+                .flatten()
+                .and_then(|x| x.extract::<Vec<String>>().ok())
+                .unwrap_or_default();
+            let _who: i8 = dict
+                .get_item("who")
+                .ok()
+                .flatten()
+                .and_then(|x| x.extract::<i8>().ok())
+                .unwrap_or(-1);
+            // For now, tile is string "3m" etc.
+            let tile_str: String = dict
+                .get_item("pai")
+                .ok()
+                .flatten()
+                .or_else(|| dict.get_item("tile").ok().flatten())
+                .and_then(|x| x.extract::<String>().ok())
+                .unwrap_or_default();
+            (type_str, tile_str)
         } else {
             return None;
         };
@@ -169,35 +189,6 @@ impl Observation {
         }
 
         if let Some(tt) = target_type {
-            let target_tile: Option<u8> = if !tile_str.is_empty() {
-                // Simplified parser for MJAI tile strings (e.g. "5p", "5pr")
-                // Assuming crate::parser::tile_from_string is available or implement simple one
-                // Since I cannot verify crate::parser exposure easily, I'll fallback to loose matching if necessary
-                // But better to implement minimal parse or try to access internal
-                // If "5p" -> 53?
-                // Let's assume `crate::types::tile_from_string` or similar exists if used elsewhere.
-                // Wait, `env.rs` calls `crate::parser::parse_hand_internal`.
-                // I'll try `crate::types::tile_from_mjai` if it exists?
-                // Or implementing a helper here?
-                // `tests/env` uses numbers.
-                // Replay uses `tid_to_mjai`.
-                // I need `mjai_to_tid`.
-                // I'll use a hacky lookup if needed or just skip check if complex.
-                // BUT `test_action_to_mjai.py` needs accurate matching.
-                // Since `tile_str` "1z" != "5p", simply checking equality of strings is enough if Action has string rep?
-                // Action has `tile` u8.
-                // I'll try to find a converter. `riichi_env` likely has one.
-                None // Placeholder, logic below handles None -> loose match
-            } else {
-                None
-            };
-
-            // Implementing basic tile check if target_tile is None (can't parse)
-            // But I MUST parse to pass the test.
-            // I'll use `crate::types::msg_to_tile` if available?
-            // I'll define a local parsing closure/function if possible.
-            // Or inspect `types.rs`.
-
             return self
                 ._legal_actions
                 .iter()
@@ -206,15 +197,24 @@ impl Observation {
                         return false;
                     }
                     if !tile_str.is_empty() {
-                        // If we can't parse easily in Rust without helper,
-                        // we can try to convert `a.tile` to string and compare?
                         if let Some(t) = a.tile {
-                            // Recover string from t
                             let t_str = crate::parser::tid_to_mjai(t);
-                            // MJAI "5p" vs "5mr" ("red 5 m")?
-                            // MJAI usually is "5p".
-                            // If `tid_to_mjai` returns "5p", strict match works.
-                            return t_str == tile_str;
+                            // MJAI sometimes uses "5p" for red 5 distinctively or "5pr"
+                            // If mismatched, try to match the base.
+                            if t_str == tile_str {
+                                return true;
+                            }
+                            // Allow "5p" to match "5pr" if strict match failed?
+                            // Or better: if mjai says "5p", it means non-red 5.
+                            // If mjai says "5pr" (or however it denotes red), it means red 5.
+                            // tid_to_mjai outputs "5mr" for red.
+                            // If input is "5m", it shouldn't match "5mr".
+                            return false;
+                        } else {
+                            // Action has no tile (e.g. Riichi), but tile_str provided?
+                            // Should ideally not happen for Discard/Chi/Pon.
+                            // But if it does, mismatch.
+                            return false;
                         }
                     }
                     true
@@ -375,20 +375,20 @@ impl Observation {
         }
 
         // 7. Riichi (26-29)
-        if (self.player_id as usize) < self.riichi_declared.len() {
-            if self.riichi_declared[self.player_id as usize] {
-                for i in 0..34 {
-                    arr[[26, i]] = 1.0;
-                }
+        if (self.player_id as usize) < self.riichi_declared.len()
+            && self.riichi_declared[self.player_id as usize]
+        {
+            for i in 0..34 {
+                arr[[26, i]] = 1.0;
             }
         }
         for i in 1..4 {
             let opp_id = (self.player_id + i) % 4;
-            if (opp_id as usize) < self.riichi_declared.len() {
-                if self.riichi_declared[opp_id as usize] {
-                    for k in 0..34 {
-                        arr[[27 + (i as usize - 1), k]] = 1.0;
-                    }
+            if (opp_id as usize) < self.riichi_declared.len()
+                && self.riichi_declared[opp_id as usize]
+            {
+                for k in 0..34 {
+                    arr[[27 + (i as usize - 1), k]] = 1.0;
                 }
             }
         }

@@ -1,6 +1,7 @@
 import json
 
 from riichienv import Action, ActionType, Observation, Phase, RiichiEnv
+from riichienv.convert import tid_to_mjai
 
 
 class TestRiichiEnv:
@@ -58,7 +59,6 @@ class TestRiichiEnv:
         assert obs_data["legal_actions"][0]["consume_tiles"] == []
 
         # Verification of MJAI selection (flexible enough)
-        from riichienv.convert import tid_to_mjai
 
         mjai_tile = tid_to_mjai(first_dealer_obs.hand[0])
         some_mjai = {"type": "dahai", "pai": mjai_tile, "actor": 0}
@@ -151,84 +151,39 @@ class TestRiichiEnv:
         assert 1 in obs_dict
         assert 0 not in obs_dict
 
-        p1_obs = obs_dict[1]
-        p1_new = [json.loads(ev) for ev in p1_obs.new_events()]
+        # Helper to process turns for P1, P2, P3
+        player_configs = [
+            (1, 5, 1, 0, 1),
+            (2, 7, 2, 1, 2),
+            (3, 9, 3, 2, 3),
+        ]  # (pid, expected_events, expected_actor, prev_pid, discard_actor)
 
-        # Check event count
-        # 1. start_game
-        # 2. start_kyoku
-        # 3. tsumo(0)
-        # 4. dahai(0)
-        # 5. tsumo(1)
-        assert len(p1_new) == 5
-        assert p1_new[4]["type"] == "tsumo"
-        assert p1_new[4]["actor"] == 1
+        for pid, expected_len, actor, _prev_pid, _discard_actor in player_configs:
+            obs = obs_dict[pid]
+            new_evs = [json.loads(ev) for ev in obs.new_events()]
+            assert len(new_evs) == expected_len
+            # Last event is Tsumo
+            assert new_evs[-1]["type"] == "tsumo"
+            assert new_evs[-1]["actor"] == actor
 
-        p1_tile = p1_obs.hand[0]
-        obs_dict = env.step({1: Action(ActionType.Discard, tile=p1_tile)})
+            discard_tile = obs.hand[0]
+            obs_dict = env.step({pid: Action(ActionType.Discard, tile=discard_tile)})
 
-        # If RNG causes a claim, we need to pass
-        if env.phase == Phase.WaitResponse:
-            obs_dict = env.step({pid: Action(ActionType.Pass) for pid in env.active_players})
-
-        assert 2 in obs_dict
-        assert 1 not in obs_dict
-
-        p2_obs = obs_dict[2]
-        p2_new = [json.loads(ev) for ev in p2_obs.new_events()]
-        print(f"DEBUG: p2_new events: {p2_new}")
-
-        assert len(p2_new) == 7
-        assert p2_new[6]["type"] == "tsumo"
-        assert p2_new[6]["actor"] == 2
-
-        p2_tile = p2_obs.hand[0]
-        obs_dict = env.step({2: Action(ActionType.Discard, tile=p2_tile)})
-
-        if env.phase == Phase.WaitResponse:
-            obs_dict = env.step({pid: Action(ActionType.Pass) for pid in env.active_players})
-
-        assert env.phase == Phase.WaitAct
-        assert 3 in obs_dict
-        assert 2 not in obs_dict
-
-        p3_obs = obs_dict[3]
-        p3_new = [json.loads(ev) for ev in p3_obs.new_events()]
-
-        assert len(p3_new) == 9
-        assert p3_new[8]["type"] == "tsumo"
-        assert p3_new[8]["actor"] == 3
-
-        p3_tile = p3_obs.hand[0]
-        obs_dict = env.step({3: Action(ActionType.Discard, tile=p3_tile)})
-
-        p0_events = []
-        if env.phase == Phase.WaitResponse:
-            if 0 in obs_dict:
-                p0_events.extend([json.loads(ev) for ev in obs_dict[0].new_events()])
-            obs_dict = env.step({pid: Action(ActionType.Pass) for pid in env.active_players})
+            if env.phase == Phase.WaitResponse:
+                obs_dict = env.step({pid: Action(ActionType.Pass) for pid in env.active_players})
 
         assert env.phase == Phase.WaitAct
         assert 0 in obs_dict
         assert 3 not in obs_dict
 
         if 0 in obs_dict:
-            p0_events.extend([json.loads(ev) for ev in obs_dict[0].new_events()])
-
-        p0_new = p0_events
+            p0_new = [json.loads(ev) for ev in obs_dict[0].new_events()]
+        else:
+            p0_new = []
 
         # Check new events from p0_obs
-        # 1. start_game (not included)
-        # 2. start_kyoku (not included)
-        # 3. tsumo(0)(not included)
-        # 4. dahai(0)
-        # 5. tsumo(1)
-        # 6. dahai(1)
-        # 7. tsumo(2)
-        # 8. dahai(2)
-        # 9. tsumo(3)
-        # 10. dahai(3)
-        # 11. tsumo(0)
+        # Sequence:
+        # dahai(0), tsumo(1), dahai(1), tsumo(2), dahai(2), tsumo(3), dahai(3), tsumo(0)
         assert len(p0_new) == 8
         assert p0_new[0]["type"] == "dahai"
         assert p0_new[0]["actor"] == 0

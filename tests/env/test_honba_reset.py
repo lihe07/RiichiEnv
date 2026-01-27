@@ -27,7 +27,7 @@ def test_honba_reset_on_ko_win():
     env.active_players = [0, 1, 2, 3]
 
     # Step where 0 discards
-    obs = env.step({0: Action(ActionType.Discard, 24, [])})
+    env.step({0: Action(ActionType.Discard, 24, [])})
 
     # Now it should be WaitResponse phase, Player 1 can Ron
     assert env.phase == Phase.WaitResponse

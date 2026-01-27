@@ -91,7 +91,7 @@ impl KyokuStepIterator {
         slf
     }
 
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<PyObject>> {
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<Py<PyAny>>> {
         let actions = slf.actions.clone();
 
         loop {
@@ -320,7 +320,7 @@ impl Kyoku {
         let initial_scores: [i32; 4] = self.scores.clone().try_into().unwrap_or([25000; 4]);
         let doras = self.doras.clone();
 
-        let oya = (self.ju % 4) as u8;
+        let oya = self.ju % 4;
         let bakaze = match self.chang {
             0 => crate::types::Wind::East,
             1 => crate::types::Wind::South,

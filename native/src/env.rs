@@ -7,7 +7,7 @@ use crate::observation::Observation;
 use crate::replay::MjaiEvent;
 use crate::rule::GameRule;
 use crate::state::GameState;
-use crate::types::{Agari, Meld, MeldType};
+use crate::types::{Agari, Meld};
 
 #[pyclass(module = "riichienv._riichienv")]
 #[derive(Debug, Clone)]
@@ -35,10 +35,8 @@ impl RiichiEnv {
                     "4p-red-half" => 2,
                     _ => 0,
                 }
-            } else if let Ok(i) = val.extract::<u8>() {
-                i
             } else {
-                0
+                val.extract::<u8>().unwrap_or_default()
             }
         } else {
             0
@@ -535,7 +533,7 @@ impl RiichiEnv {
             let uma = jun_weight[rank - 1];
             points[i] = (score - soten_base) / 1000.0 * soten_weight + uma;
         }
-        points.into_iter().map(|p| Ok(p)).collect()
+        points.into_iter().map(Ok).collect()
     }
 
     #[getter]

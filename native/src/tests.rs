@@ -5,7 +5,6 @@ mod unit_tests {
     use crate::env::RiichiEnv;
     use crate::score::calculate_score;
     use crate::types::Hand;
-    use std::collections::HashMap;
 
     #[test]
     fn test_agari_standard() {

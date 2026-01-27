@@ -200,9 +200,9 @@ impl GameState {
 
         let legal_actions = if self.is_done {
             Vec::new()
-        } else if self.phase == Phase::WaitAct && self.current_player == player_id {
-            self._get_legal_actions_internal(player_id)
-        } else if self.phase == Phase::WaitResponse && self.active_players.contains(&player_id) {
+        } else if (self.phase == Phase::WaitAct && self.current_player == player_id)
+            || (self.phase == Phase::WaitResponse && self.active_players.contains(&player_id))
+        {
             self._get_legal_actions_internal(player_id)
         } else {
             Vec::new()
@@ -428,7 +428,7 @@ impl GameState {
 
             // 2. Discard / Riichi
             if !self.riichi_declared[pid as usize] {
-                for (_i, &t) in self.hands[pid as usize].iter().enumerate() {
+                for &t in self.hands[pid as usize].iter() {
                     let is_forbidden = self.forbidden_discards[pid as usize]
                         .iter()
                         .any(|&f| f / 4 == t / 4);
@@ -460,14 +460,12 @@ impl GameState {
                         legals.push(Action::new(ActionType::Riichi, None, vec![]));
                     }
                 }
-            } else {
-                if let Some(dt) = self.drawn_tile {
-                    legals.push(Action::new(ActionType::Discard, Some(dt), vec![]));
-                }
+            } else if let Some(dt) = self.drawn_tile {
+                legals.push(Action::new(ActionType::Discard, Some(dt), vec![]));
             }
 
             // 3. Kan (Ankan / Kakan)
-            if self.wall.len() > 0 {
+            if !self.wall.is_empty() {
                 let mut counts = [0; 34];
                 for &t in &self.hands[pid as usize] {
                     let idx = t as usize / 4;
@@ -518,7 +516,7 @@ impl GameState {
                         let mut hand_post = self.hands[pid as usize].clone();
                         hand_post.retain(|&x| x / 4 != t34);
                         let mut melds_post = self.melds[pid as usize].clone();
-                        let lowest = (t34 * 4) as u8;
+                        let lowest = t34 * 4;
                         melds_post.push(Meld::new(
                             MeldType::Angang,
                             vec![lowest, lowest + 1, lowest + 2, lowest + 3],
@@ -583,7 +581,7 @@ impl GameState {
                     "N" => Wind::North as u8,
                     _ => Wind::East as u8,
                 };
-                self.oya = oya as u8;
+                self.oya = oya;
                 self.dora_indicators =
                     vec![crate::replay::TileConverter::parse_tile_136(&dora_marker)];
 
@@ -613,7 +611,7 @@ impl GameState {
                 self.drawn_tile = Some(tile);
                 self.hands[actor].push(tile);
                 self.hands[actor].sort();
-                if self.wall.len() > 0 {
+                if !self.wall.is_empty() {
                     self.wall.pop();
                 }
                 self.needs_tsumo = false;
@@ -933,7 +931,7 @@ impl GameState {
                                     continue;
                                 }
 
-                                let p_wind = (i as u8 + 4 - self.oya) % 4;
+                                let p_wind = (i + 4 - self.oya) % 4;
                                 let cond = Conditions {
                                     tsumo: false,
                                     riichi: self.riichi_declared[i as usize],
@@ -956,10 +954,11 @@ impl GameState {
                                 // 42=Kokushi, 49=Kokushi13
                                 if res.agari && (res.yaku.contains(&42) || res.yaku.contains(&49)) {
                                     chankan_ronners.push(i);
-                                    self.current_claims
-                                        .entry(i as u8)
-                                        .or_default()
-                                        .push(Action::new(ActionType::Ron, Some(tile), vec![]));
+                                    self.current_claims.entry(i).or_default().push(Action::new(
+                                        ActionType::Ron,
+                                        Some(tile),
+                                        vec![],
+                                    ));
                                 }
                             }
                         }
@@ -989,7 +988,7 @@ impl GameState {
                             // If Ron -> add to chankan_ronners
                             // Use basic logic similar to Discard Ron check
                             // But set cond.chankan = true
-                            let p_wind = (i as u8 + 4 - self.oya) % 4;
+                            let p_wind = (i + 4 - self.oya) % 4;
                             let cond = Conditions {
                                 tsumo: false,
                                 riichi: self.riichi_declared[i as usize],
@@ -1102,14 +1101,14 @@ impl GameState {
 
                                 // Pao Payer pays for Pao Part
                                 if let Some(pp) = pao_payer {
-                                    deltas[pp as usize] -= pao_amt as i32;
-                                    total_win += pao_amt as i32;
+                                    deltas[pp as usize] -= pao_amt;
+                                    total_win += pao_amt;
                                 }
 
                                 // Non-Pao Part split normally
                                 if non_pao_amt > 0 {
                                     if pid == self.oya {
-                                        let share = (non_pao_amt / 3) as i32;
+                                        let share = non_pao_amt / 3;
                                         for i in 0..4 {
                                             if i != pid {
                                                 deltas[i as usize] -= share;
@@ -1117,8 +1116,8 @@ impl GameState {
                                             }
                                         }
                                     } else {
-                                        let oya_share = (non_pao_amt / 2) as i32;
-                                        let ko_share = (non_pao_amt / 4) as i32;
+                                        let oya_share = non_pao_amt / 2;
+                                        let ko_share = non_pao_amt / 4;
                                         for i in 0..4 {
                                             if i != pid {
                                                 if i == self.oya {
@@ -1161,9 +1160,9 @@ impl GameState {
 
                             deltas[pid as usize] += total_win;
 
-                            for i in 0..4 {
-                                self.scores[i] += deltas[i];
-                                self.score_deltas[i] = deltas[i];
+                            self.score_deltas.copy_from_slice(&deltas);
+                            for (score, delta) in self.scores.iter_mut().zip(deltas.iter()) {
+                                *score += delta;
                             }
 
                             let mut val = res;
@@ -1182,7 +1181,7 @@ impl GameState {
                                 ev.insert("target".to_string(), Value::Number(pid.into()));
                                 ev.insert(
                                     "deltas".to_string(),
-                                    serde_json::to_value(&deltas).unwrap(),
+                                    serde_json::to_value(deltas).unwrap(),
                                 );
                                 ev.insert("tsumo".to_string(), Value::Bool(true));
 
@@ -1201,7 +1200,6 @@ impl GameState {
                             }
 
                             self._initialize_next_round(pid == self.oya, false);
-                            return;
                         } else {
                             self.current_player = (self.current_player + 1) % 4;
                             self._deal_next();
@@ -1240,7 +1238,7 @@ impl GameState {
                         || act.action_type == ActionType::Daiminkan
                         || act.action_type == ActionType::Chi
                     {
-                        if let Some((old_pid, old_act)) = &call_claim {
+                        if let Some((_old_pid, old_act)) = &call_claim {
                             let old_is_pon = old_act.action_type == ActionType::Pon
                                 || old_act.action_type == ActionType::Daiminkan;
                             let new_is_pon = act.action_type == ActionType::Pon
@@ -1290,7 +1288,6 @@ impl GameState {
                         round_wind: Wind::from(self.round_wind),
                         kyoutaku: self.riichi_sticks,
                         tsumi: self.honba as u32,
-                        ..Default::default()
                     };
 
                     let calc =
@@ -1321,7 +1318,7 @@ impl GameState {
                             if pao_yakuman_val > 0 {
                                 let unit = if w_pid == self.oya { 48000 } else { 32000 };
                                 let honba_pts = (self.honba as i32) * 300;
-                                pao_amt = ((pao_yakuman_val * unit) / 2) + honba_pts as u32;
+                                pao_amt = pao_yakuman_val * unit / 2 + honba_pts as u32;
                             }
                         }
 
@@ -1362,7 +1359,7 @@ impl GameState {
                             ev.insert("target".to_string(), Value::Number(target_pid.into()));
                             ev.insert(
                                 "deltas".to_string(),
-                                serde_json::to_value(&this_deltas).unwrap(),
+                                serde_json::to_value(this_deltas).unwrap(),
                             );
 
                             let mut ura_markers = Vec::new();
@@ -1380,13 +1377,12 @@ impl GameState {
                     }
                 }
 
-                for i in 0..4 {
-                    self.scores[i] += total_deltas[i];
-                    self.score_deltas[i] = total_deltas[i];
+                self.score_deltas.copy_from_slice(&total_deltas);
+                for (score, delta) in self.scores.iter_mut().zip(total_deltas.iter()) {
+                    *score += delta;
                 }
 
                 self._initialize_next_round(oya_won, false);
-                return;
             } else if let Some((claimer, action)) = call_claim {
                 if let Some(rp) = self.riichi_pending_acceptance {
                     self.scores[rp as usize] -= 1000;
@@ -1514,10 +1510,12 @@ impl GameState {
                         if t34 % 9 <= 5 {
                             self.forbidden_discards[claimer as usize].push((t34 + 3) * 4);
                         }
-                    } else if t34 >= 2 && consumed_34[1] == t34 - 1 && consumed_34[0] == t34 - 2 {
-                        if t34 % 9 >= 3 {
-                            self.forbidden_discards[claimer as usize].push((t34 - 3) * 4);
-                        }
+                    } else if t34 >= 2
+                        && consumed_34[1] == t34 - 1
+                        && consumed_34[0] == t34 - 2
+                        && t34 % 9 >= 3
+                    {
+                        self.forbidden_discards[claimer as usize].push((t34 - 3) * 4);
                     }
                 }
 
@@ -1823,9 +1821,7 @@ impl GameState {
         let mut nagashi_winners = Vec::new();
 
         if reason == "exhaustive_draw" {
-            for i in 0..4 {
-                let hand = &self.hands[i];
-                let melds = &self.melds[i];
+            for (i, (hand, melds)) in self.hands.iter().zip(self.melds.iter()).enumerate() {
                 let calc =
                     crate::agari_calculator::AgariCalculator::new(hand.clone(), melds.clone());
                 if calc.is_tenpai() {
@@ -1852,8 +1848,8 @@ impl GameState {
                     }
                 }
             }
-        } else if reason.starts_with("Error: Illegal Action by Player ") {
-            if let Ok(pid) = reason["Error: Illegal Action by Player ".len()..].parse::<usize>() {
+        } else if let Some(stripped) = reason.strip_prefix("Error: Illegal Action by Player ") {
+            if let Ok(pid) = stripped.parse::<usize>() {
                 if pid < 4 {
                     let is_offender_oya = (pid as u8) == self.oya;
                     if is_offender_oya {
@@ -1898,7 +1894,7 @@ impl GameState {
             ev.insert("reason".to_string(), Value::String(final_reason.clone()));
             ev.insert(
                 "deltas".to_string(),
-                serde_json::to_value(&self.score_deltas).unwrap(),
+                serde_json::to_value(self.score_deltas).unwrap(),
             );
             self._push_mjai_event(Value::Object(ev));
         }
@@ -1931,15 +1927,14 @@ impl GameState {
         if turns_ok && melds_empty {
             if let Some(first_tile) = self.discards[0].first() {
                 let first = first_tile / 4;
-                if first >= 27 && first <= 30 {
-                    if self
+                if (27..=30).contains(&first)
+                    && self
                         .discards
                         .iter()
                         .all(|d| d.first().map(|&t| t / 4) == Some(first))
-                    {
-                        self._trigger_abortive_draw("sufuurenta");
-                        return true;
-                    }
+                {
+                    self._trigger_abortive_draw("sufuurenta");
+                    return true;
                 }
             }
         }
@@ -1991,7 +1986,7 @@ impl GameState {
         let actor = event["actor"].as_u64().map(|a| a as usize);
 
         for pid in 0..4 {
-            let mut should_push = true;
+            let should_push = true;
             let mut final_json = json_str.clone();
 
             if type_str == "start_kyoku" {
@@ -2229,7 +2224,7 @@ impl GameState {
             if !in_discards && !in_missed {
                 let calc =
                     crate::agari_calculator::AgariCalculator::new(hand.clone(), melds.clone());
-                let p_wind = (i as u8 + 4 - self.oya) % 4;
+                let p_wind = (i + 4 - self.oya) % 4;
                 let cond = Conditions {
                     tsumo: false,
                     riichi: self.riichi_declared[i as usize],

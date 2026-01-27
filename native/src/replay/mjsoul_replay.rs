@@ -196,7 +196,7 @@ impl MjSoulReplay {
                 // maybe just dict of rounds? Unlikely given usage.
                 return Err(PyValueError::new_err("Invalid dict format: missing 'data'"));
             }
-        } else if let Some(_) = v.as_array() {
+        } else if v.is_array() {
             let rounds: Vec<Vec<RawAction>> = serde_json::from_value(v).map_err(|e| {
                 PyValueError::new_err(format!("Failed to parse rounds list: {}", e))
             })?;
@@ -222,10 +222,10 @@ impl MjSoulReplay {
         // Calculate game end scores using the last round
         let game_end_scores = if let Some(last) = rounds.last_mut() {
             // Simulate last round to get end_scores
-            let mut state = crate::state::GameState::new(0, false, None, 0, last.rule.clone());
+            let mut state = crate::state::GameState::new(0, false, None, 0, last.rule);
 
             let initial_scores: [i32; 4] = last.scores.clone().try_into().unwrap_or([25000; 4]);
-            let oya = (last.ju % 4) as u8;
+            let oya = last.ju % 4;
             let bakaze = match last.chang {
                 0 => crate::types::Wind::East,
                 1 => crate::types::Wind::South,
