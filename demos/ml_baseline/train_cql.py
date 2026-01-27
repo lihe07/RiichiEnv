@@ -25,20 +25,13 @@ def cql_loss(q_values, current_actions, masks=None):
     """
     # q_values: (B, NumActions)
     # current_actions: (B) index
-    
+
     # 1. Q(s, a_data)
     # actions is (B), unsqueeze to (B,1), gather, squeeze -> (B)
     q_data = q_values.gather(1, current_actions.unsqueeze(1)).squeeze(1)
-    
+
     # 2. logsumexp(Q(s, .))
     if masks is not None:
-        # Mask invalid actions with -inf before logsumexp
-        # masks is 1.0 for valid, 0.0 for invalid? 
-        # get_legal_action_mask returns 1.0 for valid.
-        # We need Boolean mask where True = keep (valid).
-        # masked_fill takes mask where True = fill.
-        # So we want mask where True = INVALID.
-        # masks tensor is 1.0 (valid).
         invalid_mask = (masks < 0.5)
         q_masked = q_values.clone()
         q_masked = q_masked.masked_fill(invalid_mask, -1e9)
