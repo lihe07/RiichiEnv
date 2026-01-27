@@ -56,6 +56,9 @@ class TestActionToMjaiFormat:
             riichi_sticks,
             round_wind,
             oya,
+            0,  # kyoku_index
+            [],  # waits
+            False,  # is_tenpai
         )
 
         mjai_dict = {"type": "dahai", "pai": "5p"}

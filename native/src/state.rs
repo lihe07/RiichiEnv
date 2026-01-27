@@ -193,10 +193,10 @@ impl GameState {
             }
         }
 
-        println!(
-            "DEBUG: get_observation pid={}, phase={:?}, current={}, is_done={}, active={:?}",
-            player_id, self.phase, self.current_player, self.is_done, self.active_players
-        );
+        // println!(
+        //     "DEBUG: get_observation pid={}, phase={:?}, current={}, is_done={}, active={:?}",
+        //     player_id, self.phase, self.current_player, self.is_done, self.active_players
+        // );
 
         let legal_actions = if self.is_done {
             Vec::new()
@@ -217,6 +217,30 @@ impl GameState {
         };
         self.player_event_counts[pid] = full_log_len;
 
+        let mut waits = Vec::new();
+        let mut is_tenpai = false;
+
+        // Compute waits if strictly necessary or always? Always is better for training.
+        // Convert internal hand (0-135) to Hand (0-33)
+        let mut check_hand = crate::types::Hand::default();
+        for &t in &self.hands[pid] {
+            check_hand.add(t / 4);
+        }
+
+        // Find waits
+        for t in 0..34 {
+            if check_hand.counts[t as usize] < 4 {
+                check_hand.add(t);
+                if crate::agari::is_agari(&mut check_hand) {
+                    waits.push(t);
+                }
+                check_hand.remove(t);
+            }
+        }
+        if !waits.is_empty() {
+            is_tenpai = true;
+        }
+
         Observation::new(
             player_id,
             masked_hands,
@@ -231,6 +255,9 @@ impl GameState {
             self.riichi_sticks,
             self.round_wind,
             self.oya,
+            self.kyoku_idx,
+            waits,
+            is_tenpai,
         )
     }
 
@@ -355,6 +382,9 @@ impl GameState {
     }
 
     pub fn _get_legal_actions_internal(&self, pid: u8) -> Vec<Action> {
+        if pid == self.current_player {
+            // eprintln!("DEBUG_RUST: get_legal_actions pid={} phase={:?}", pid, self.phase);
+        }
         let mut legals = Vec::new();
         if self.is_done {
             return legals;
@@ -398,7 +428,6 @@ impl GameState {
 
             // 2. Discard / Riichi
             if !self.riichi_declared[pid as usize] {
-                // Normal
                 for (_i, &t) in self.hands[pid as usize].iter().enumerate() {
                     let is_forbidden = self.forbidden_discards[pid as usize]
                         .iter()
@@ -2241,15 +2270,21 @@ impl GameState {
             if !self.riichi_declared[i as usize] && !self.wall.is_empty() {
                 let count = hand.iter().filter(|&&t| t / 4 == tile / 4).count();
                 if count >= 2 {
-                    let consumes: Vec<u8> = hand
-                        .iter()
-                        .filter(|&&t| t / 4 == tile / 4)
-                        .take(2)
-                        .cloned()
-                        .collect();
-                    legals.push(Action::new(ActionType::Pon, Some(tile), consumes));
+                    // Check if taking this Pon leaves any valid discard (Kuikae check)
+                    // Consumes 2 matching tiles. Forbidden: tile (same 34).
+                    // Remaining hand must have at least one tile != tile/4.
+                    if hand.iter().any(|&t| t / 4 != tile / 4) {
+                        let consumes: Vec<u8> = hand
+                            .iter()
+                            .filter(|&&t| t / 4 == tile / 4)
+                            .take(2)
+                            .cloned()
+                            .collect();
+                        legals.push(Action::new(ActionType::Pon, Some(tile), consumes));
+                    }
                 }
                 if count >= 3 {
+                    // Daiminkan
                     let consumes: Vec<u8> = hand
                         .iter()
                         .filter(|&&t| t / 4 == tile / 4)
@@ -2265,6 +2300,40 @@ impl GameState {
             if !self.riichi_declared[i as usize] && !self.wall.is_empty() && is_shimocha {
                 let t_val = tile / 4;
                 if t_val < 27 {
+                    // Helper to check standard Kuikae
+                    let check_chi_kuikae = |c1: u8, c2: u8| -> bool {
+                        let mut forbidden = vec![t_val];
+                        let mut cons = [c1 / 4, c2 / 4];
+                        cons.sort();
+
+                        if cons[0] == t_val + 1 && cons[1] == t_val + 2 {
+                            if t_val % 9 <= 5 {
+                                forbidden.push(t_val + 3);
+                            }
+                        } else if t_val >= 2 && cons[1] == t_val - 1 && cons[0] == t_val - 2 {
+                            if t_val % 9 >= 3 {
+                                forbidden.push(t_val - 3);
+                            }
+                        }
+
+                        let mut used_c1 = false;
+                        let mut used_c2 = false;
+                        for &t in hand.iter() {
+                            if !used_c1 && t == c1 {
+                                used_c1 = true;
+                                continue;
+                            }
+                            if !used_c2 && t == c2 {
+                                used_c2 = true;
+                                continue;
+                            }
+                            if !forbidden.contains(&(t / 4)) {
+                                return true;
+                            }
+                        }
+                        false
+                    };
+
                     if t_val % 9 >= 2 {
                         let c1_opts: Vec<u8> = hand
                             .iter()
@@ -2278,7 +2347,13 @@ impl GameState {
                             .collect();
                         for &c1 in &c1_opts {
                             for &c2 in &c2_opts {
-                                legals.push(Action::new(ActionType::Chi, Some(tile), vec![c1, c2]));
+                                if check_chi_kuikae(c1, c2) {
+                                    legals.push(Action::new(
+                                        ActionType::Chi,
+                                        Some(tile),
+                                        vec![c1, c2],
+                                    ));
+                                }
                             }
                         }
                     }
@@ -2295,7 +2370,13 @@ impl GameState {
                             .collect();
                         for &c1 in &c1_opts {
                             for &c2 in &c2_opts {
-                                legals.push(Action::new(ActionType::Chi, Some(tile), vec![c1, c2]));
+                                if check_chi_kuikae(c1, c2) {
+                                    legals.push(Action::new(
+                                        ActionType::Chi,
+                                        Some(tile),
+                                        vec![c1, c2],
+                                    ));
+                                }
                             }
                         }
                     }
@@ -2312,7 +2393,13 @@ impl GameState {
                             .collect();
                         for &c1 in &c1_opts {
                             for &c2 in &c2_opts {
-                                legals.push(Action::new(ActionType::Chi, Some(tile), vec![c1, c2]));
+                                if check_chi_kuikae(c1, c2) {
+                                    legals.push(Action::new(
+                                        ActionType::Chi,
+                                        Some(tile),
+                                        vec![c1, c2],
+                                    ));
+                                }
                             }
                         }
                     }

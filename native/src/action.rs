@@ -132,4 +132,71 @@ impl Action {
     fn set_consume_tiles(&mut self, value: Vec<u8>) {
         self.consume_tiles = value;
     }
+
+    pub fn encode(&self) -> PyResult<i32> {
+        match self.action_type {
+            ActionType::Discard => {
+                if let Some(tile) = self.tile {
+                    Ok((tile as i32) / 4)
+                } else {
+                    Err(pyo3::exceptions::PyValueError::new_err(
+                        "Discard action requires a tile",
+                    ))
+                }
+            }
+            ActionType::Riichi => Ok(37),
+            ActionType::Chi => {
+                if let Some(target) = self.tile {
+                    let target_34 = (target as i32) / 4;
+                    // consume_tiles should have the other 2 tiles.
+                    let mut tiles_34: Vec<i32> =
+                        self.consume_tiles.iter().map(|&x| (x as i32) / 4).collect();
+                    tiles_34.push(target_34);
+                    tiles_34.sort();
+                    tiles_34.dedup(); // Should be 3 consecutive numbers
+
+                    if tiles_34.len() != 3 {
+                        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                            "Invalid Chi tiles: target={}, consumed={:?}",
+                            target, self.consume_tiles
+                        )));
+                    }
+
+                    if target_34 == tiles_34[0] {
+                        Ok(38) // Low
+                    } else if target_34 == tiles_34[1] {
+                        Ok(39) // Mid
+                    } else {
+                        Ok(40) // High
+                    }
+                } else {
+                    Err(pyo3::exceptions::PyValueError::new_err(
+                        "Chi action requires a target tile",
+                    ))
+                }
+            }
+            ActionType::Pon => Ok(41),
+            ActionType::Daiminkan => {
+                if let Some(tile) = self.tile {
+                    Ok(42 + (tile as i32) / 4)
+                } else {
+                    Err(pyo3::exceptions::PyValueError::new_err(
+                        "Daiminkan action requires a tile",
+                    ))
+                }
+            }
+            ActionType::Ankan | ActionType::Kakan => {
+                if let Some(first) = self.consume_tiles.first() {
+                    Ok(42 + (*first as i32) / 4)
+                } else {
+                    Err(pyo3::exceptions::PyValueError::new_err(
+                        "Ankan/Kakan action requires consumed tiles",
+                    ))
+                }
+            }
+            ActionType::Ron | ActionType::Tsumo => Ok(79),
+            ActionType::KyushuKyuhai => Ok(80), // Ryukyoku
+            ActionType::Pass => Ok(81),
+        }
+    }
 }

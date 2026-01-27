@@ -5,8 +5,10 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13.5"
 dependencies = [
+    "dotenv>=0.9.9",
     "numpy>=2.4.1",
     "polars>=1.37.1",
     "torch>=2.9.1",
     "tqdm>=4.67.1",
+    "wandb>=0.24.0",
 ]

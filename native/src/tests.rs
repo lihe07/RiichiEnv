@@ -264,4 +264,52 @@ mod unit_tests {
         let waits = calc.get_waits_u8();
         assert!(waits.contains(&18)); // 1s
     }
+
+    #[test]
+    fn test_kuikae_deadlock_repro() {
+        use crate::action::{Action, ActionType};
+        use std::collections::HashMap;
+
+        let mut env = create_test_env(4);
+        let pid = 0;
+
+        // Hand: 4m, 5m, 6m, 6m. (12, 16, 20, 21)
+        // 3m is 8.
+        env.state.hands[pid as usize] = vec![12, 16, 20, 21];
+
+        // Setup P3 (Kamicha of P0)
+        env.state.current_player = 3;
+        env.state.phase = Phase::WaitAct;
+        env.state.active_players = vec![3];
+        env.state.hands[3].push(8); // Give 3m
+
+        // Action: P3 discards 3m
+        let mut actions = HashMap::new();
+        actions.insert(3, Action::new(ActionType::Discard, Some(8), vec![]));
+
+        env.state.step(&actions);
+
+        env.state.step(&actions);
+
+        // With the fix, the Chi action leading to Kuikae deadlock should NOT be generated.
+        // Since there are no other valid claims, the game should NOT stop at WaitResponse.
+        // Instead, it should proceed to the next player's turn (P0).
+
+        // Note: The original expectation was that P0 would be active with claims.
+        // But since the ONLY claim was invalid, it is filtered out.
+        // So P0 has NO claims.
+        // Thus step() continues to P0's normal turn (WaitAct).
+
+        assert_eq!(
+            env.state.phase,
+            Phase::WaitAct,
+            "Should proceed to WaitAct as deadlock Chi is filtered out"
+        );
+        assert_eq!(env.state.current_player, 0, "Should be P0's turn");
+
+        // Verify current_claims is empty or does not contain 0
+        if let Some(claims) = env.state.current_claims.get(&0) {
+            assert!(claims.is_empty(), "P0 should have no legal claims");
+        }
+    }
 }

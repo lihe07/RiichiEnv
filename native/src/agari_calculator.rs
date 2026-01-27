@@ -24,11 +24,11 @@ impl AgariCalculator {
     #[pyo3(signature = (tiles_136, melds=vec![]))]
     pub fn new(tiles_136: Vec<u8>, melds: Vec<Meld>) -> Self {
         if tiles_136.len() == 13 || tiles_136.len() == 14 {
-            println!(
-                "DEBUG: AgariCalculator::new len={} tiles={:?}",
-                tiles_136.len(),
-                tiles_136
-            );
+            // println!(
+            //     "DEBUG: AgariCalculator::new len={} tiles={:?}",
+            //     tiles_136.len(),
+            //     tiles_136
+            // );
         }
         let mut aka_dora_count = 0;
         let mut tiles_34 = Vec::with_capacity(tiles_136.len());
