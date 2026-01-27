@@ -62,13 +62,6 @@ class BaseDataset(IterableDataset):
         elif isinstance(self.data_sources, str):
             return glob.glob(self.data_sources)
         return []
-    
-    def _get_legal_action_mask(self, obs):
-        mask = np.zeros(82, dtype=np.float32)
-        for legal_action in obs.legal_actions():
-            aid = legal_action.encode()
-            mask[aid] = 1.0
-        return mask
 
 
 class MCDataset(BaseDataset):
@@ -103,9 +96,9 @@ class MCDataset(BaseDataset):
                     for obs, action in kyoku.steps(player_id):
                         features = ObservationEncoder.encode(obs)
                         action_id = action.encode()
-                        mask = self._get_legal_action_mask(obs)
-                        # Ensure expert action is valid
-                        mask[action_id] = 1.0
+
+                        mask_bytes = obs.mask()
+                        mask = np.frombuffer(mask_bytes, dtype=np.uint8).copy()
                         trajectory.append((features, action_id, mask))
 
                     # Compute Returns

@@ -29,13 +29,10 @@ def cql_loss(q_values, current_actions, masks=None):
     q_data = q_values.gather(1, current_actions.unsqueeze(1)).squeeze(1)
 
     # 2. logsumexp(Q(s, .))
-    if masks is not None:
-        invalid_mask = (masks < 0.5)
-        q_masked = q_values.clone()
-        q_masked = q_masked.masked_fill(invalid_mask, -1e9)
-        logsumexp_q = torch.logsumexp(q_masked, dim=1)
-    else:
-        logsumexp_q = torch.logsumexp(q_values, dim=1)
+    invalid_mask = (masks == 0)
+    q_masked = q_values.clone()
+    q_masked = q_masked.masked_fill(invalid_mask, -1e9)
+    logsumexp_q = torch.logsumexp(q_masked, dim=1)
 
     cql_term = (logsumexp_q - q_data).mean()
     return cql_term, q_data
@@ -114,7 +111,7 @@ class Trainer:
                 features = features.to(self.device)
                 actions = actions.long().to(self.device)
                 targets = targets.float().to(self.device)
-                masks = masks.float().to(self.device)
+                masks = masks.long().to(self.device)
                 
                 optimizer.zero_grad()
                 
