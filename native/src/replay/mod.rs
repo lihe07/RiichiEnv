@@ -83,6 +83,7 @@ pub struct KyokuStepIterator {
     idx: usize,
     pending_action: Option<(u8, EnvAction)>,
     filter_seat: Option<u8>,
+    skip_single_action: bool,
 }
 
 #[pymethods]
@@ -96,13 +97,21 @@ impl KyokuStepIterator {
 
         loop {
             if let Some((pid, action)) = slf.pending_action.take() {
-                let obs = slf.state.get_observation(pid);
+                let obs =
+                    slf.state
+                        .get_observation_for_replay(pid, &action, &format!("{:?}", action))?;
+
                 let current_log_action = &actions[slf.idx];
                 slf.state.apply_log_action(current_log_action);
                 slf.idx += 1;
 
                 if let Some(target) = slf.filter_seat {
                     if pid == target {
+                        // Filter forced actions if requested
+                        if slf.skip_single_action && obs._legal_actions.len() <= 1 {
+                            continue;
+                        }
+
                         let py = slf.py();
                         return Ok(Some((obs, action).into_pyobject(py)?.unbind().into()));
                     }
@@ -136,18 +145,20 @@ impl KyokuStepIterator {
                     ..
                 } => {
                     let pid = *seat as u8;
-                    let obs = slf.state.get_observation(pid);
+                    let env_action =
+                        EnvAction::new(crate::action::ActionType::Discard, Some(*tile), Vec::new());
 
                     if *is_liqi {
                         let riichi_action =
                             EnvAction::new(crate::action::ActionType::Riichi, None, Vec::new());
-                        let discard_action = EnvAction::new(
-                            crate::action::ActionType::Discard,
-                            Some(*tile),
-                            Vec::new(),
-                        );
-                        slf.pending_action = Some((pid, discard_action));
-                        slf.state.riichi_declared[pid as usize] = true;
+
+                        let obs = slf.state.get_observation_for_replay(
+                            pid,
+                            &riichi_action,
+                            &format!("{:?}", action),
+                        )?;
+
+                        slf.pending_action = Some((pid, env_action));
 
                         if let Some(target) = slf.filter_seat {
                             if pid == target {
@@ -156,7 +167,6 @@ impl KyokuStepIterator {
                                     (obs, riichi_action).into_pyobject(py)?.unbind().into(),
                                 ));
                             }
-                            // continue loop to next iteration/pending action logic
                         } else {
                             let py = slf.py();
                             return Ok(Some(
@@ -164,16 +174,21 @@ impl KyokuStepIterator {
                             ));
                         }
                     } else {
-                        let env_action = EnvAction::new(
-                            crate::action::ActionType::Discard,
-                            Some(*tile),
-                            Vec::new(),
-                        );
+                        let obs = slf.state.get_observation_for_replay(
+                            pid,
+                            &env_action,
+                            &format!("{:?}", action),
+                        )?;
+
                         slf.state.apply_log_action(action);
                         slf.idx += 1;
 
                         if let Some(target) = slf.filter_seat {
                             if pid == target {
+                                if slf.skip_single_action && obs._legal_actions.len() <= 1 {
+                                    continue;
+                                }
+
                                 let py = slf.py();
                                 return Ok(Some(
                                     (obs, env_action).into_pyobject(py)?.unbind().into(),
@@ -194,7 +209,7 @@ impl KyokuStepIterator {
                     ..
                 } => {
                     let pid = *seat as u8;
-                    let obs = slf.state.get_observation(pid);
+
                     let env_action_type = match meld_type {
                         MeldType::Chi => crate::action::ActionType::Chi,
                         MeldType::Peng => crate::action::ActionType::Pon,
@@ -205,11 +220,20 @@ impl KyokuStepIterator {
                     let t = tiles.first().copied();
                     let env_action = EnvAction::new(env_action_type, t, tiles.to_vec());
 
+                    let obs = slf.state.get_observation_for_replay(
+                        pid,
+                        &env_action,
+                        &format!("{:?}", action),
+                    )?;
+
                     slf.state.apply_log_action(action);
                     slf.idx += 1;
 
                     if let Some(target) = slf.filter_seat {
                         if pid == target {
+                            if slf.skip_single_action && obs._legal_actions.len() <= 1 {
+                                continue;
+                            }
                             let py = slf.py();
                             return Ok(Some((obs, env_action).into_pyobject(py)?.unbind().into()));
                         }
@@ -227,19 +251,55 @@ impl KyokuStepIterator {
                     ..
                 } => {
                     let pid = *seat as u8;
-                    let obs = slf.state.get_observation(pid);
                     let atype = match meld_type {
                         MeldType::Angang => crate::action::ActionType::Ankan,
                         MeldType::Addgang => crate::action::ActionType::Kakan,
                         _ => crate::action::ActionType::Ankan,
                     };
-                    let tile = tiles.first().copied();
-                    let env_action = EnvAction::new(atype, tile, tiles.to_vec());
+
+                    let env_action = match atype {
+                        crate::action::ActionType::Ankan => {
+                            let t34 = tiles[0] / 4;
+                            let lowest = t34 * 4;
+                            EnvAction::new(
+                                atype,
+                                Some(lowest),
+                                vec![lowest, lowest + 1, lowest + 2, lowest + 3],
+                            )
+                        }
+                        crate::action::ActionType::Kakan => {
+                            let t34 = tiles[0] / 4;
+                            let tile = tiles[0];
+                            // Find the existing Peng meld to get its tiles
+                            let mut consume = Vec::new();
+                            for m in &slf.state.melds[pid as usize] {
+                                if m.meld_type == MeldType::Peng && m.tiles[0] / 4 == t34 {
+                                    consume = m.tiles.clone();
+                                    break;
+                                }
+                            }
+                            EnvAction::new(atype, Some(tile), consume)
+                        }
+                        _ => {
+                            let tile = tiles.first().copied();
+                            EnvAction::new(atype, tile, tiles.to_vec())
+                        }
+                    };
+
+                    let obs = slf.state.get_observation_for_replay(
+                        pid,
+                        &env_action,
+                        &format!("{:?}", action),
+                    )?;
+
                     slf.state.apply_log_action(action);
                     slf.idx += 1;
 
                     if let Some(target) = slf.filter_seat {
                         if pid == target {
+                            if slf.skip_single_action && obs._legal_actions.len() <= 1 {
+                                continue;
+                            }
                             let py = slf.py();
                             return Ok(Some((obs, env_action).into_pyobject(py)?.unbind().into()));
                         }
@@ -253,18 +313,33 @@ impl KyokuStepIterator {
                 Action::Hule { hules } => {
                     let first = &hules[0];
                     let pid = first.seat as u8;
-                    let obs = slf.state.get_observation(pid);
+
                     let atype = if first.zimo {
                         crate::action::ActionType::Tsumo
                     } else {
                         crate::action::ActionType::Ron
                     };
-                    let env_action = EnvAction::new(atype, None, Vec::new());
+                    let tile = if first.zimo {
+                        slf.state.drawn_tile
+                    } else {
+                        slf.state.last_discard.map(|(_, t)| t)
+                    };
+                    let env_action = EnvAction::new(atype, tile, Vec::new());
+
+                    let obs = slf.state.get_observation_for_replay(
+                        pid,
+                        &env_action,
+                        &format!("{:?}", action),
+                    )?;
+
                     slf.state.apply_log_action(action);
                     slf.idx += 1;
 
                     if let Some(target) = slf.filter_seat {
                         if pid == target {
+                            if slf.skip_single_action && obs._legal_actions.len() <= 1 {
+                                continue;
+                            }
                             let py = slf.py();
                             return Ok(Some((obs, env_action).into_pyobject(py)?.unbind().into()));
                         }
@@ -307,13 +382,15 @@ impl Kyoku {
         Ok(AgariContextIterator::new(self.clone()))
     }
 
-    #[pyo3(signature = (seat=None, rule=None))]
+    #[pyo3(signature = (seat=None, rule=None, skip_single_action=None))]
     fn steps(
         &self,
         seat: Option<u8>,
         rule: Option<crate::rule::GameRule>,
+        skip_single_action: Option<bool>,
     ) -> PyResult<KyokuStepIterator> {
         let rule = rule.unwrap_or(self.rule);
+        let skip_single_action = skip_single_action.unwrap_or(true);
         let mut state = crate::state::GameState::new(0, false, None, 0, rule);
 
         // Initialize state from Kyoku data
@@ -329,17 +406,47 @@ impl Kyoku {
             _ => crate::types::Wind::East,
         } as u8;
 
+        let mut wall = None;
+        if let Some(p_hex) = &self.paishan {
+            if let Ok(w) = hex::decode(p_hex) {
+                wall = Some(w);
+            }
+        }
+
         state._initialize_round(
             oya,
             bakaze,
             self.ben,
             self.liqibang as u32,
-            None,
+            wall.clone(),
             Some(initial_scores),
         );
 
         state.hands = self.hands.clone().try_into().unwrap_or_default();
+        for h in state.hands.iter_mut() {
+            h.sort();
+        }
         state.dora_indicators = doras;
+
+        // Only pop initial hands if we didn't use a provided wall (which usually starts with hands already removed in MJSoul)
+        // Actually, MJSoul paishan usually has 136 tiles.
+        // Let's check wall len after initialization.
+        if wall.is_none() && state.wall.len() == 136 {
+            // Pop initial hands (13 * 4 = 52 tiles)
+            for _ in 0..52 {
+                if !state.wall.is_empty() {
+                    state.wall.pop();
+                }
+            }
+        } else if let Some(w) = wall {
+            if w.len() == 136 {
+                for _ in 0..52 {
+                    if !state.wall.is_empty() {
+                        state.wall.pop();
+                    }
+                }
+            }
+        }
 
         Ok(KyokuStepIterator {
             state,
@@ -347,6 +454,7 @@ impl Kyoku {
             idx: 0,
             pending_action: None,
             filter_seat: seat,
+            skip_single_action,
         })
     }
 

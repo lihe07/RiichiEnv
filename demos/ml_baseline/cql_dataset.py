@@ -81,35 +81,39 @@ class MCDataset(BaseDataset):
             replay = MjSoulReplay.from_dict(paifu.data)
             buffer = []
 
-            for kyoku in replay.take_kyokus():
-                # Encode Group Features for Reward Prediction
-                grp_features = GrpFeatureEncoder(kyoku).encode()
-                
-                for player_id in range(4):
-                    trajectory = []
+            try:
+                for kyoku in replay.take_kyokus():
+                    # Encode Group Features for Reward Prediction
+                    grp_features = GrpFeatureEncoder(kyoku).encode()
+                    
+                    for player_id in range(4):
+                        trajectory = []
 
-                    # Compute Final Reward for this Kyoku
-                    assert self.reward_predictor is not None
-                    _, final_reward = self.reward_predictor.calc_pts_rewards([grp_features], player_id)
+                        # Compute Final Reward for this Kyoku
+                        assert self.reward_predictor is not None
+                        _, final_reward = self.reward_predictor.calc_pts_rewards([grp_features], player_id)
 
-                    # Collect Trajectory
-                    for obs, action in kyoku.steps(player_id):
-                        features = ObservationEncoder.encode(obs)
-                        action_id = action.encode()
+                        # Collect Trajectory
+                        for obs, action in kyoku.steps(player_id):
+                            features = ObservationEncoder.encode(obs)
+                            action_id = action.encode()
 
-                        mask_bytes = obs.mask()
-                        mask = np.frombuffer(mask_bytes, dtype=np.uint8).copy()
-                        assert 0 <= action_id < mask.shape[0], f"action_id should be in [0, {mask.shape[0]})"
-                        assert mask[action_id] == 1, f"action_id {action_id} should be legal"
-                        trajectory.append((features, action_id, mask))
+                            mask_bytes = obs.mask()
+                            mask = np.frombuffer(mask_bytes, dtype=np.uint8).copy()
+                            assert 0 <= action_id < mask.shape[0], f"action_id should be in [0, {mask.shape[0]})"
+                            assert mask[action_id] == 1, f"action_id {action_id} should be legal"
+                            trajectory.append((features, action_id, mask))
 
-                    # Compute Returns
-                    T = len(trajectory)
-                    for t, (feat, act, mask) in enumerate(trajectory):
-                        # Decayed Reward: R * gamma^(T-t-1)
-                        decayed = final_reward * (self.gamma ** (T - t - 1))
-                        buffer.append((feat, act, decayed, mask))
-            
+                        # Compute Returns
+                        T = len(trajectory)
+                        for t, (feat, act, mask) in enumerate(trajectory):
+                            # Decayed Reward: R * gamma^(T-t-1)
+                            decayed = final_reward * (self.gamma ** (T - t - 1))
+                            buffer.append((feat, act, decayed, mask))
+            except RuntimeError as e:
+                print(f"Error processing paifu: {file_path}")
+                raise e
+
             if self.is_train:
                 random.shuffle(buffer)
                 
