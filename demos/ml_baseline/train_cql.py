@@ -17,7 +17,24 @@ from grp_model import RewardPredictor
 from utils import AverageMeter
 
 
-def cql_loss(q_values, current_actions, masks=None):
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data_glob", type=str, required=True, help="Glob path for training data (.xz)")
+    parser.add_argument("--grp_model", type=str, default="./grp_model.pth", help="Path to reward model")
+    parser.add_argument("--output", type=str, default="cql_model.pth", help="Output model path")
+    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--alpha", type=float, default=1.0, help="CQL Scale")
+    parser.add_argument("--gamma", type=float, default=0.99)
+    parser.add_argument("--num_epochs", type=int, default=10)
+    parser.add_argument("--num_workers", type=int, default=12)
+    parser.add_argument("--limit", type=int, default=3e6)
+
+    args = parser.parse_args()
+    return args
+
+
+def cql_loss(q_values: torch.Tensor, current_actions: torch.Tensor, masks: torch.Tensor) -> torch.Tensor:
     """
     Computes CQL Regularization Term: logsumexp(Q(s, a_all)) - Q(s, a_data)
     """
@@ -160,23 +177,6 @@ class Trainer:
                 break
 
         run.finish()
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data_glob", type=str, required=True, help="Glob path for training data (.xz)")
-    parser.add_argument("--grp_model", type=str, default="./grp_model.pth", help="Path to reward model")
-    parser.add_argument("--output", type=str, default="cql_model.pth", help="Output model path")
-    parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--alpha", type=float, default=1.0, help="CQL Scale")
-    parser.add_argument("--gamma", type=float, default=0.99)
-    parser.add_argument("--num_epochs", type=int, default=10)
-    parser.add_argument("--num_workers", type=int, default=12)
-    parser.add_argument("--limit", type=int, default=3e6)
-
-    args = parser.parse_args()
-    return args
 
 
 def train(args: argparse.Namespace):
