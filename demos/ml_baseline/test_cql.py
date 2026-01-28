@@ -22,11 +22,7 @@ class CQLAgent:
             q_values = q_values.masked_fill(mask == 0, -1e9)
             action_selected = q_values.argmax(dim=1).item()
 
-            found_action = None
-            for legal_action in obs.legal_actions():
-                if legal_action.encode() == action_selected:
-                    found_action = legal_action
-                    break
+            found_action: Action | None = obs.find_action(action_selected)
             if found_action is None:
                 raise ValueError(
                     f"No legal action found for selected action id {action_selected}"

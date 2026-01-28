@@ -136,6 +136,20 @@ impl Observation {
         Ok(pyo3::types::PyBytes::new(py, &mask))
     }
 
+    #[pyo3(signature = (action_id))]
+    pub fn find_action(&self, action_id: usize) -> Option<Action> {
+        self._legal_actions
+            .iter()
+            .find(|a| {
+                if let Ok(idx) = a.encode() {
+                    (idx as usize) == action_id
+                } else {
+                    false
+                }
+            })
+            .cloned()
+    }
+
     #[pyo3(signature = (mjai_data))]
     pub fn select_action_from_mjai(&self, mjai_data: &Bound<'_, PyAny>) -> Option<Action> {
         let (atype, tile_str) = if let Ok(s) = mjai_data.extract::<String>() {
