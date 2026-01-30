@@ -40,46 +40,44 @@ class MahjongWorker:
         Runs one full episode of self-play.
         Returns a list of transitions for the learner.
         """
-        self.env = RiichiEnv(game_mode="4p-red-half")
-        obs_dict = self.env.reset()
-        
+
+        obs_dict = self.env.reset(
+            scores=[25000, 25000, 25000, 25000],
+            bakaze=0,  # East
+            oya=0,     # Player 0
+            honba=0,
+            kyotaku=0
+        )
+
         # key: player_id, value: list of steps
         episode_buffer = {0: [], 1: [], 2: [], 3: []}
         
         while not self.env.done():
             steps = {}
+            any_legal = False
             for pid, obs in obs_dict.items():
+                legal_actions = obs.legal_actions()
+                if not legal_actions:
+                    continue
+                
+                any_legal = True
                 # 1. Observation
                 feat_tensor, mask_tensor = self._encode_obs(obs)
                 
                 # 2. Policy Step (Stochastic Sampling for PPO)
                 with torch.no_grad():
-                    # Forward returns (logits, q_values)
                     logits, _ = self.model(feat_tensor.unsqueeze(0)) # (1, 82)
-                    
-                    # Apply Mask
-                    # Set illegal actions to very small number
                     logits = logits.masked_fill(mask_tensor.unsqueeze(0) == 0, -1e9)
                     
-                    # Create distribution
                     dist = Categorical(logits=logits)
                     action = dist.sample()
                     log_prob = dist.log_prob(action)
-                    
-                    
                     action_idx = action.item()
                     
                 # 3. Step Environment
                 found_action = obs.find_action(action_idx)
                 if found_action is None:
-                    legal_actions = obs.legal_actions()
-                    if len(legal_actions) == 0:
-                         # Log fatal state and break to avoid infinite loop
-                         print(f"FATAL: Empty Legal Actions for PID {obs.player_id}")
-                         print(f"Hand: {obs.hand}")
-                         print(f"Melds: {obs.melds[obs.player_id]}")
-                         break
-                         
+                    # Should not happen given mask_fill, but for safety:
                     found_action = legal_actions[0]
 
                 steps[pid] = found_action
@@ -92,6 +90,15 @@ class MahjongWorker:
                     "log_prob": log_prob.cpu().item(), # Scalar
                     "policy_version": self.policy_version, 
                 })
+
+            if not any_legal and not self.env.done():
+                # Fatal: No one has legal actions but game is not done
+                print(f"FATAL: Total Deadlock - No Legal Actions for any player.")
+                print(f"  Phase: {self.env.phase}")
+                print(f"  Current Player: {self.env.current_player}")
+                print(f"  Hands: {self.env.hands}")
+                print(f"  MJAI Log (Last 10): {self.env.mjai_log[-10:]}")
+                return []
 
             obs_dict = self.env.step(steps)
             

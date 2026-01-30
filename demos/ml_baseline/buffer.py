@@ -1,7 +1,7 @@
 
 import torch
 import numpy as np
-from torchrl.data import TensorDictReplayBuffer, LazyMemmapStorage, TensorDictPrioritizedReplayBuffer
+from torchrl.data import TensorDictReplayBuffer, LazyTensorStorage, TensorDictPrioritizedReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement, PrioritizedSampler
 from tensordict import TensorDict
 
@@ -17,8 +17,9 @@ class GlobalReplayBuffer:
         
         # 1. Actor Buffer (FIFO / Sliding Window)
         # Keeps only recent data for PPO
+        # Using LazyTensorStorage (In-Memory) for performance
         self.actor_buffer = TensorDictReplayBuffer(
-            storage=LazyMemmapStorage(actor_capacity),
+            storage=LazyTensorStorage(actor_capacity),
             sampler=SamplerWithoutReplacement(),
             batch_size=batch_size,
         )
@@ -27,7 +28,7 @@ class GlobalReplayBuffer:
         # Keeps long history for CQL
         try:
             self.critic_buffer = TensorDictPrioritizedReplayBuffer(
-                storage=LazyMemmapStorage(critic_capacity),
+                storage=LazyTensorStorage(critic_capacity),
                 alpha=0.6,
                 beta=0.4,
                 batch_size=batch_size,
@@ -35,7 +36,7 @@ class GlobalReplayBuffer:
         except RuntimeError:
             print("Warning: PrioritizedReplayBuffer not available (C++ extension missing). Using standard ReplayBuffer.")
             self.critic_buffer = TensorDictReplayBuffer(
-                storage=LazyMemmapStorage(critic_capacity),
+                storage=LazyTensorStorage(critic_capacity),
                 sampler=SamplerWithoutReplacement(),
                 batch_size=batch_size,
             )
@@ -43,47 +44,41 @@ class GlobalReplayBuffer:
     def add(self, transitions: list[dict]):
         """
         Adds a list of transitions to both buffers.
-        Transitions should be a list of dicts with keys: 
-        'features', 'mask', 'action', 'reward', 'done', 'policy_version', 'q_val'
+        Optimized: Creates a single TensorDict for the whole episode at once.
         """
         if not transitions:
             return
 
-        # Convert list of dicts to TensorDict
-        # We assume all items are Tensors or compatible
-        # Stack them
+        # Batched conversion: List of Dict -> Dict of Arrays -> TensorDict
+        # This is significantly faster than looping and stacking TensorDicts
+        batch_size = len(transitions)
         
-        # Optimization: Pre-allocate or use TensorDict.from_dict if possible
-        # But for diverse list, looping is safer first.
-        
-        # Structure check
-        # features: (46, 34)
-        # mask: (82,)
-        
-        data_list = []
-        for t in transitions:
-            # Handle Numpy/Scalar inputs from Ray Worker
-            # features: (46, 34) numpy
-            # mask: (82,) numpy
-            
-            td = TensorDict({
-                "features": torch.from_numpy(t["features"]), 
-                "mask": torch.from_numpy(t["mask"]),         
-                "action": torch.tensor(t["action"]),         
-                "reward": torch.tensor(t["reward"]),         
-                "done": torch.tensor(t["done"], dtype=torch.bool), # Preserve bool for now, cast later if needed? -> Reward usually float, Done bool/int
-                "policy_version": torch.tensor(t["policy_version"]),
-                "log_prob": torch.tensor(t["log_prob"]),     
-            }, batch_size=[])
-            data_list.append(td)
-            
-        batch = torch.stack(data_list)
+        # Pre-allocate dictionaries for stacking
+        # keys: 'features', 'mask', 'action', 'reward', 'done', 'policy_version', 'log_prob'
+        batch_data = {
+            "features": np.stack([t["features"] for t in transitions]),
+            "mask": np.stack([t["mask"] for t in transitions]),
+            "action": np.array([t["action"] for t in transitions]),
+            "reward": np.array([t["reward"] for t in transitions]),
+            "done": np.array([t["done"] for t in transitions], dtype=bool),
+            "policy_version": np.array([t["policy_version"] for t in transitions]),
+            "log_prob": np.array([t["log_prob"] for t in transitions]),
+        }
+
+        batch = TensorDict({
+            "features": torch.from_numpy(batch_data["features"]),
+            "mask": torch.from_numpy(batch_data["mask"]),
+            "action": torch.from_numpy(batch_data["action"]),
+            "reward": torch.from_numpy(batch_data["reward"]),
+            "done": torch.from_numpy(batch_data["done"]),
+            "policy_version": torch.from_numpy(batch_data["policy_version"]),
+            "log_prob": torch.from_numpy(batch_data["log_prob"]),
+        }, batch_size=[batch_size])
         
         # Add to Actor Buffer (Old data falls off)
         self.actor_buffer.extend(batch)
         
         # Add to Critic Buffer (Prioritized)
-        # Initial priority is default (max)
         self.critic_buffer.extend(batch)
 
     

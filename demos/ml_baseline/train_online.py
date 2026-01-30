@@ -3,22 +3,20 @@ import os
 import ray
 import torch
 import time
-# ...
-
 import argparse
+
 import wandb
 from dotenv import load_dotenv
 load_dotenv()
 import numpy as np
+import torch
+from torch.distributions import Categorical
+from riichienv import RiichiEnv
 
 from ray_actor import MahjongWorker
 from learner import MahjongLearner
 from buffer import GlobalReplayBuffer
 
-import torch
-import numpy as np
-from riichienv import RiichiEnv
-from torch.distributions import Categorical
 
 def evaluate_vs_baseline(hero_model, baseline_model, device, num_episodes=30):
     """
@@ -134,13 +132,6 @@ def proper_loop(args):
     step = 0
     wandb.init(project="riichienv-ppo-cql", config=vars(args))
     
-    # Timing Stats
-    t_wait_total = 0.0
-    t_get_total = 0.0
-    t_add_total = 0.0
-    t_train_total = 0.0
-    t_dispatch_total = 0.0
-    
     # Create checkpoints dir
     os.makedirs("checkpoints", exist_ok=True)
     
@@ -186,21 +177,13 @@ def proper_loop(args):
                         # Don't crash training loop if eval fails
                         pass
 
-            t0 = time.time()
             ready_ids, _ = ray.wait(list(future_to_worker.keys()), num_returns=1)
-            t_wait_total += time.time() - t0
-            
             future = ready_ids[0]
             worker_idx = future_to_worker.pop(future)
             
             # Get Result
-            t_get_start = time.time()
             transitions = ray.get(future)
-            t_get_total += time.time() - t_get_start
-            
-            t1 = time.time()
             buffer.add(transitions)
-            t_add_total += time.time() - t1
             
             # Anneal Beta
             # Linear annealing from start_beta to end_beta over num_steps
@@ -211,7 +194,6 @@ def proper_loop(args):
             # Train
             metrics = {"beta": beta}
             
-            t2 = time.time()
             # Update Critic (using historical data) -> Multiple steps?
             if len(buffer.critic_buffer) > args.batch_size:
                 c_batch = buffer.sample_critic(args.batch_size)
@@ -229,29 +211,20 @@ def proper_loop(args):
                 a_batch = buffer.sample_actor(args.batch_size)
                 a_metrics = learner.update_actor(a_batch)
                 metrics.update(a_metrics)
-            t_train_total += time.time() - t2
                 
             if step % 200 == 0 and step > 0:
                 print(f"Step {step}: {metrics}")
-                print(f"[Profile] Wait={t_wait_total/200:.4f}s | Get={t_get_total/200:.4f}s | Add={t_add_total/200:.4f}s | Train={t_train_total/200:.4f}s | Disp={t_dispatch_total/200:.4f}s")
-                t_wait_total = 0.0
-                t_get_total = 0.0
-                t_add_total = 0.0
-                t_train_total = 0.0
-                t_dispatch_total = 0.0
                 wandb.log(metrics, step=step)
             
             # Re-dispatch worker with latest weights
             # Sync weights every X steps or every episode?
             # Sync every time for now for On-Policy-ness
-            t3 = time.time()
             weights = {k: v.cpu() for k,v in learner.get_weights().items()}
             weight_ref = ray.put(weights)
             workers[worker_idx].update_weights.remote(weight_ref, learner.policy_version)
             
             new_future = workers[worker_idx].collect_episode.remote()
             future_to_worker[new_future] = worker_idx
-            t_dispatch_total += time.time() - t3
             
             step += 1
             

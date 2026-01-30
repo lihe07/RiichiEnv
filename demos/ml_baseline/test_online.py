@@ -60,9 +60,16 @@ class PPOAgent:
 
 def main() -> None:
     ranks = []
+    env = RiichiEnv(game_mode="4p-red-half")
+
     for i in range(10):
-        env = RiichiEnv(game_mode="4p-red-half")
-        obs_dict = env.reset()
+        obs_dict = env.reset(
+            scores=[25000, 25000, 25000, 25000],
+            bakaze=0,
+            oya=0,
+            honba=0,
+            kyotaku=0
+        )
 
         cql_agent = CQLAgent("./cql_model.pth")
         ppo_agent = PPOAgent("./checkpoints/model_70000.pth")
@@ -86,6 +93,7 @@ def main() -> None:
         print(env.scores())
         print(env.ranks())
         ranks.append(env.ranks()[0])
+        print(env.mjai_log[:2])
 
     print("Average ranks:", np.mean(ranks))
 
