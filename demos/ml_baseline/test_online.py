@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 from riichienv import RiichiEnv, Action
-from riichienv.agents import RandomAgent
 from torch.distributions import Categorical
 
 from cql_model import QNetwork
@@ -73,7 +72,6 @@ def main() -> None:
 
         cql_agent = CQLAgent("./cql_model.pth")
         ppo_agent = PPOAgent("./checkpoints/model_70000.pth")
-        random_agent = RandomAgent()
         agents = {
             0: ppo_agent,
             1: cql_agent,
