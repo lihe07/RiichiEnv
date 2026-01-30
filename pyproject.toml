@@ -101,7 +101,6 @@ root_packages = ["riichienv"]
 members = [
     "tools/mjsoul-parser",
     "tools/mjsoul-scoring-validation",
-    "tools/mjsoul-scoring-validation",
 ]
 
 [tool.ty.environment]
