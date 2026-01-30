@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from riichienv import RiichiEnv
+from riichienv import RiichiEnv, Action
 from riichienv.agents import RandomAgent
 from torch.distributions import Categorical
 
