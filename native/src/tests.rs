@@ -290,15 +290,6 @@ mod unit_tests {
 
         env.state.step(&actions);
 
-        // With the fix, the Chi action leading to Kuikae deadlock should NOT be generated.
-        // Since there are no other valid claims, the game should NOT stop at WaitResponse.
-        // Instead, it should proceed to the next player's turn (P0).
-
-        // Note: The original expectation was that P0 would be active with claims.
-        // But since the ONLY claim was invalid, it is filtered out.
-        // So P0 has NO claims.
-        // Thus step() continues to P0's normal turn (WaitAct).
-
         assert_eq!(
             env.state.phase,
             Phase::WaitAct,
@@ -310,5 +301,66 @@ mod unit_tests {
         if let Some(claims) = env.state.current_claims.get(&0) {
             assert!(claims.is_empty(), "P0 should have no legal claims");
         }
+    }
+    #[test]
+    fn test_match_84_agari_check() {
+        use crate::agari_calculator::AgariCalculator;
+        use crate::types::{Conditions, Wind};
+
+        // Hand: 111m, 78p, 11123s, 789s
+        // 1m: 0
+        // 7p: 15. 8p: 16.
+        // 1s: 18. 2s: 19. 3s: 20.
+        // 7s: 24. 8s: 25. 9s: 26.
+
+        let mut tiles = vec![
+            0, 1, 2,  // 1m x3
+            60, // 7p (15*4)
+            64, // 8p (16*4)
+            72, 73, 74,  // 1s x3
+            76,  // 2s (19*4)
+            80,  // 3s (20*4)
+            96,  // 7s (24*4)
+            100, // 8s (25*4)
+            104, // 9s (26*4)
+        ];
+        tiles.sort();
+
+        let calc = AgariCalculator::new(tiles, Vec::new());
+
+        let cond = Conditions {
+            tsumo: false,
+            riichi: false,
+            double_riichi: false,
+            ippatsu: false,
+            haitei: false,
+            houtei: false,
+            rinshan: false,
+            chankan: false,
+            tsumo_first_turn: false,
+            player_wind: Wind::West,
+            round_wind: Wind::East,
+            kyoutaku: 0,
+            tsumi: 0,
+        };
+
+        // 1. Check 6p (14 -> 56)
+        let res6p = calc.calc(56, vec![], vec![], Some(cond.clone()));
+        println!(
+            "6p Result: Agari={}, Shape={}, Han={}, Yaku={:?}",
+            res6p.agari, res6p.has_agari_shape, res6p.han, res6p.yaku
+        );
+        assert!(!res6p.agari, "6p should NOT be Agari (No Yaku)");
+        assert!(res6p.has_agari_shape, "6p should have Agari Shape");
+        assert_eq!(res6p.han, 0, "6p should have 0 Han");
+
+        // 2. Check 9p (17 -> 68)
+        let res9p = calc.calc(68, vec![], vec![], Some(cond));
+        println!(
+            "9p Result: Agari={}, Han={}, Yaku={:?}",
+            res9p.agari, res9p.han, res9p.yaku
+        );
+        assert!(res9p.agari, "9p should be Agari");
+        assert!(res9p.han >= 3, "9p should be Junchan (>= 3 Han)"); // Junchan (3)
     }
 }

@@ -216,7 +216,6 @@ fn decompose(hand: &mut Hand, start_idx: usize) -> bool {
     }
 
     // Try Shuntsu (Sequence) - Only for number tiles
-    // 0-8: man, 9-17: pin, 18-26: sou. 27+: honors (no seq)
     if i < 27 {
         if let Some(is_valid_seq_start) = match i {
             0..=6 => Some(true),   // 1m-7m
@@ -229,13 +228,11 @@ fn decompose(hand: &mut Hand, start_idx: usize) -> bool {
                 hand.counts[i + 1] -= 1;
                 hand.counts[i + 2] -= 1;
                 if decompose(hand, i) {
-                    // Stay at i, might have more runs
                     hand.counts[i] += 1;
                     hand.counts[i + 1] += 1;
                     hand.counts[i + 2] += 1;
                     return true;
                 }
-                // backtrack
                 hand.counts[i] += 1;
                 hand.counts[i + 1] += 1;
                 hand.counts[i + 2] += 1;

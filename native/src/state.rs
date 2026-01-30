@@ -336,8 +336,12 @@ impl GameState {
                     round_wind: Wind::from(self.round_wind),
                     chankan: env_action.action_type == ActionType::Ron
                         && self.phase == Phase::WaitAct, // Simplified
-                    haitei: self.wall.len() <= 14 && env_action.action_type == ActionType::Tsumo,
-                    houtei: self.wall.len() <= 14 && env_action.action_type == ActionType::Ron,
+                    haitei: self.wall.len() <= 14
+                        && env_action.action_type == ActionType::Tsumo
+                        && !self.is_rinshan_flag,
+                    houtei: self.wall.len() <= 14
+                        && env_action.action_type == ActionType::Ron
+                        && !self.is_rinshan_flag,
                     rinshan: self.is_rinshan_flag,
                     tsumo_first_turn: self.is_first_turn && self.discards[pid as usize].is_empty(),
                     kyoutaku: self.riichi_sticks,
@@ -533,11 +537,14 @@ impl GameState {
         }
     }
 
-    pub fn _get_legal_actions_internal(&self, pid: u8) -> Vec<Action> {
+    pub fn _get_legal_actions_internal(&mut self, pid: u8) -> Vec<Action> {
+        // eprintln!("DEBUG: _get_legal_actions_internal pid={}", pid);
+        let mut legals = Vec::new();
+        let mut hand = self.hands[pid as usize].clone();
+        hand.sort();
         if pid == self.current_player {
             // eprintln!("DEBUG_RUST: get_legal_actions pid={} phase={:?}", pid, self.phase);
         }
-        let mut legals = Vec::new();
         if self.is_done {
             return legals;
         }
@@ -557,7 +564,7 @@ impl GameState {
                     player_wind: Wind::from((pid + 4 - self.oya) % 4),
                     round_wind: Wind::from(self.round_wind),
                     chankan: false,
-                    haitei: self.wall.len() <= 14,
+                    haitei: self.wall.len() <= 14 && !self.is_rinshan_flag,
                     houtei: false,
                     rinshan: self.is_rinshan_flag,
                     tsumo_first_turn: self.is_first_turn && self.discards[pid as usize].is_empty(),
@@ -630,7 +637,7 @@ impl GameState {
             }
 
             // 3. Kan (Ankan / Kakan)
-            if !self.wall.is_empty() {
+            if self.wall.len() > 14 && self.drawn_tile.is_some() {
                 let mut counts = [0; 34];
                 for &t in &self.hands[pid as usize] {
                     let idx = t as usize / 4;
@@ -1068,14 +1075,6 @@ impl GameState {
                     ActionType::Ankan => {
                         // Ankan Logic
                         let tile = act.tile.or(act.consume_tiles.first().copied()).unwrap_or(0);
-                        // Ankan usually uses consume_tiles (4 tiles). Tile provided might be one of them or None.
-                        // Standard Ankan action might imply the group.
-                        // Tile for Chankan is the one being kan'd (represented by any of them or specific ID).
-                        // Usually Ankan tile ID is irrelevant for matching except class.
-                        // But for Chankan, the specific tile ID might matter if tracking?
-                        // Actually standard Kokushi Chankan allows robbing the Ankan.
-                        // We use `tile` as match target.
-
                         let mut chankan_ronners = Vec::new();
                         if self.rule.allows_ron_on_ankan_for_kokushi_musou {
                             for i in 0..4 {
@@ -1087,7 +1086,7 @@ impl GameState {
                                 let hand = &self.hands[i as usize];
                                 let melds = &self.melds[i as usize];
 
-                                // Furiten check needed? Yes.
+                                // Furiten check
                                 let tile_class = tile / 4;
                                 let in_discards = self.discards[i as usize]
                                     .iter()
@@ -1138,6 +1137,19 @@ impl GameState {
                         }
                     }
                     ActionType::Kakan => {
+                        // Log Kakan immediately (before Chankan check)
+                        if !self.skip_mjai_logging {
+                            let mut ev = serde_json::Map::new();
+                            ev.insert("type".to_string(), Value::String("kakan".to_string()));
+                            ev.insert("actor".to_string(), Value::Number(pid.into()));
+                            let tile = act.tile.unwrap_or(0);
+                            ev.insert("pai".to_string(), Value::String(tid_to_mjai(tile)));
+                            let cons: Vec<String> =
+                                act.consume_tiles.iter().map(|&t| tid_to_mjai(t)).collect();
+                            ev.insert("consumed".to_string(), serde_json::to_value(cons).unwrap());
+                            self._push_mjai_event(Value::Object(ev));
+                        }
+
                         // Kakan Logic
                         // Check Chankan
                         let tile = act.tile.or(act.consume_tiles.first().copied()).unwrap_or(0);
@@ -1149,10 +1161,6 @@ impl GameState {
                             // Check Agari
                             let hand = &self.hands[i as usize];
                             let melds = &self.melds[i as usize];
-                            // ... Agari Check ...
-                            // If Ron -> add to chankan_ronners
-                            // Use basic logic similar to Discard Ron check
-                            // But set cond.chankan = true
                             let p_wind = (i + 4 - self.oya) % 4;
                             let cond = Conditions {
                                 tsumo: false,
@@ -1164,7 +1172,7 @@ impl GameState {
                                 chankan: true,
                                 haitei: false,
                                 houtei: false,
-                                rinshan: self.is_rinshan_flag,
+                                rinshan: false,
                                 tsumo_first_turn: false,
                                 kyoutaku: self.riichi_sticks,
                                 tsumi: self.honba as u32,
@@ -1173,13 +1181,39 @@ impl GameState {
                                 hand.clone(),
                                 melds.clone(),
                             );
-                            // Need to strip missed agari checks?
-                            // Chankan Ron is allowed even if Furiten?
-                            // No, Furiten applies.
+
                             // Check Furiten
+                            let mut is_furiten = false;
+                            let waits = calc.get_waits_u8();
+                            for &w in &waits {
+                                if self.discards[i as usize].iter().any(|&d| d / 4 == w) {
+                                    is_furiten = true;
+                                    break;
+                                }
+                            }
+                            if self.missed_agari_riichi[i as usize]
+                                || self.missed_agari_doujun[i as usize]
+                            {
+                                is_furiten = true;
+                            }
+
                             // If valid:
-                            let res =
-                                calc.calc(tile, self.dora_indicators.clone(), vec![], Some(cond));
+                            let res = if !is_furiten {
+                                calc.calc(tile, self.dora_indicators.clone(), vec![], Some(cond))
+                            } else {
+                                crate::types::Agari::new(
+                                    false,
+                                    false,
+                                    0,
+                                    0,
+                                    0,
+                                    vec![],
+                                    0,
+                                    0,
+                                    None,
+                                    false,
+                                )
+                            };
 
                             if res.agari && (res.yakuman || res.han >= 1) {
                                 // Add Ron action offer
@@ -1210,7 +1244,7 @@ impl GameState {
                             riichi: self.riichi_declared[pid as usize],
                             double_riichi: self.double_riichi_declared[pid as usize],
                             ippatsu: self.ippatsu_cycle[pid as usize],
-                            haitei: self.wall.is_empty(),
+                            haitei: self.wall.len() <= 14 && !self.is_rinshan_flag,
                             rinshan: self.is_rinshan_flag,
                             tsumo_first_turn: self.is_first_turn
                                 && self.melds.iter().all(|m| m.is_empty()),
@@ -1352,9 +1386,7 @@ impl GameState {
 
                                 let mut ura_markers = Vec::new();
                                 if self.riichi_declared[pid as usize] {
-                                    // Helper: Mock Ura using dora_indicators to ensure non-empty for functionality tests
-                                    ura_markers =
-                                        self.dora_indicators.iter().map(|&x| x as u32).collect();
+                                    ura_markers = self._get_ura_markers();
                                 }
                                 ev.insert(
                                     "ura_markers".to_string(),
@@ -1444,8 +1476,8 @@ impl GameState {
                         riichi: self.riichi_declared[w_pid as usize],
                         double_riichi: self.double_riichi_declared[w_pid as usize],
                         ippatsu: self.ippatsu_cycle[w_pid as usize],
-                        haitei: self.wall.is_empty(),
-                        houtei: self.wall.is_empty(),
+                        haitei: false,
+                        houtei: self.wall.len() <= 14 && !self.is_rinshan_flag,
                         rinshan: false,
                         chankan: is_chankan,
                         tsumo_first_turn: false,
@@ -1529,8 +1561,7 @@ impl GameState {
 
                             let mut ura_markers = Vec::new();
                             if self.riichi_declared[w_pid as usize] {
-                                ura_markers =
-                                    self.dora_indicators.iter().map(|&x| x as u32).collect();
+                                ura_markers = self._get_ura_markers();
                             }
                             ev.insert(
                                 "ura_markers".to_string(),
@@ -1566,6 +1597,8 @@ impl GameState {
                     }
                     self.riichi_pending_acceptance = None;
                 }
+                self.is_rinshan_flag = false;
+                self.is_first_turn = false;
 
                 for p in 0..4 {
                     self.ippatsu_cycle[p] = false;
@@ -1721,7 +1754,8 @@ impl GameState {
     }
 
     fn _deal_next(&mut self) {
-        if self.wall.is_empty() {
+        self.is_rinshan_flag = false;
+        if self.wall.len() <= 14 {
             self._trigger_ryukyoku("exhaustive_draw");
             return;
         }
@@ -1943,6 +1977,10 @@ impl GameState {
             ev.insert(
                 "scores".to_string(),
                 serde_json::to_value(self.scores).unwrap(),
+            );
+            ev.insert(
+                "dora_marker".to_string(),
+                Value::String(tid_to_mjai(self.dora_indicators[0])),
             );
 
             let mut tehais = Vec::new();
@@ -2182,9 +2220,6 @@ impl GameState {
             }
 
             if should_push {
-                if !self.skip_mjai_logging {
-                    // println!("DEBUG: Pushing event {} to PID {}", type_str, pid);
-                }
                 self.mjai_log_per_player[pid].push(final_json);
             }
         }
@@ -2259,39 +2294,44 @@ impl GameState {
         }
 
         // Draw Rinshan
-        if let Some(t) = self.wall.pop() {
+        self.is_first_turn = false;
+        for p in 0..4 {
+            self.ippatsu_cycle[p] = false;
+        }
+
+        if self.wall.len() > 14 {
+            let t = self.wall.pop().unwrap();
             self.hands[p_idx].push(t);
             self.drawn_tile = Some(t);
             self.rinshan_draw_count += 1;
             self.is_rinshan_flag = true;
 
             if !self.skip_mjai_logging {
-                let mut ev = serde_json::Map::new();
+                // Determine type and log if NOT Kakan (Kakan is logged in step)
                 let type_str = match action.action_type {
-                    ActionType::Ankan => "ankan",
-                    ActionType::Kakan => "kakan",
-                    ActionType::Daiminkan => "daiminkan",
-                    _ => "kan",
+                    ActionType::Ankan => Some("ankan"),
+                    ActionType::Kakan => None, // Already logged
+                    ActionType::Daiminkan => Some("daiminkan"),
+                    _ => Some("kan"),
                 };
-                ev.insert("type".to_string(), Value::String(type_str.to_string()));
-                ev.insert("actor".to_string(), Value::Number(pid.into()));
-                if action.action_type == ActionType::Daiminkan {
-                    let (discarder, tile) = self.last_discard.unwrap();
-                    ev.insert("target".to_string(), Value::Number(discarder.into()));
-                    ev.insert("pai".to_string(), Value::String(tid_to_mjai(tile)));
-                } else if action.action_type == ActionType::Kakan {
-                    ev.insert(
-                        "pai".to_string(),
-                        Value::String(tid_to_mjai(action.tile.unwrap_or(0))),
-                    );
+
+                if let Some(ts) = type_str {
+                    let mut ev = serde_json::Map::new();
+                    ev.insert("type".to_string(), Value::String(ts.to_string()));
+                    ev.insert("actor".to_string(), Value::Number(pid.into()));
+                    if action.action_type == ActionType::Daiminkan {
+                        let (discarder, tile) = self.last_discard.unwrap();
+                        ev.insert("target".to_string(), Value::Number(discarder.into()));
+                        ev.insert("pai".to_string(), Value::String(tid_to_mjai(tile)));
+                    }
+                    let cons: Vec<String> = action
+                        .consume_tiles
+                        .iter()
+                        .map(|&t| tid_to_mjai(t))
+                        .collect();
+                    ev.insert("consumed".to_string(), serde_json::to_value(cons).unwrap());
+                    self._push_mjai_event(Value::Object(ev));
                 }
-                let cons: Vec<String> = action
-                    .consume_tiles
-                    .iter()
-                    .map(|&t| tid_to_mjai(t))
-                    .collect();
-                ev.insert("consumed".to_string(), serde_json::to_value(cons).unwrap());
-                self._push_mjai_event(Value::Object(ev));
 
                 // PUSH TSUMO EVENT FOR RINSHAN
                 let mut t_ev = serde_json::Map::new();
@@ -2336,6 +2376,7 @@ impl GameState {
 
     fn _resolve_discard(&mut self, pid: u8, tile: u8, tsumogiri: bool) {
         self.discards[pid as usize].push(tile);
+        self.last_discard = Some((pid, tile));
         self.discard_from_hand[pid as usize].push(!tsumogiri);
         let is_riichi_decl = self.riichi_stage[pid as usize];
         self.discard_is_riichi[pid as usize].push(is_riichi_decl);
@@ -2400,8 +2441,8 @@ impl GameState {
                     round_wind: Wind::from(self.round_wind),
                     chankan: false,
                     haitei: false,
-                    houtei: self.wall.is_empty(),
-                    rinshan: self.is_rinshan_flag,
+                    houtei: self.wall.len() <= 14 && !self.is_rinshan_flag,
+                    rinshan: false,
                     tsumo_first_turn: false,
                     kyoutaku: self.riichi_sticks,
                     tsumi: self.honba as u32,
@@ -2421,32 +2462,30 @@ impl GameState {
 
                 if !is_furiten {
                     let res = calc.calc(tile, self.dora_indicators.clone(), vec![], Some(cond));
-                    if res.agari && (res.yakuman || res.han >= 1) {
+                    if res.agari {
                         legals.push(Action::new(ActionType::Ron, Some(tile), vec![]));
+                    } else if res.has_agari_shape {
+                        // Hand shape complete but no Yaku (and not Yakuman).
+                        // This counts as a missed win, preventing Ron until next draw (Furiten).
+                        self.missed_agari_doujun[i as usize] = true;
                     }
                 }
             }
 
             // 2. Pon / Kan
-            if !self.riichi_declared[i as usize] && !self.wall.is_empty() {
+            if !self.riichi_declared[i as usize] && self.wall.len() > 14 {
                 let count = hand.iter().filter(|&&t| t / 4 == tile / 4).count();
                 if count >= 2 && hand.len() >= 3 {
                     // Check if taking this Pon leaves any valid discard (Kuikae check)
                     let check_pon_kuikae = |consumes: &Vec<u8>| -> bool {
                         let mut forbidden_34 = Vec::new();
-
-                        match self.rule.kuikae_mode {
-                            crate::rule::KuikaeMode::None => {}
-                            _ => {
-                                // SameAndUsed: forbid discarding taken tile kind
-                                forbidden_34.push(tile / 4);
-                            }
+                        if !matches!(self.rule.kuikae_mode, crate::rule::KuikaeMode::None) {
+                            forbidden_34.push(tile / 4);
                         }
 
-                        // Check if any tile in remaining hand is NOT forbidden
+                        // Simulation: Check if any tile in remaining hand is NOT forbidden
                         let mut used_consumes = vec![false; consumes.len()];
                         for &t in hand.iter() {
-                            // Skip consumed tiles (simulation)
                             let mut consumed_this = false;
                             for (idx, &c) in consumes.iter().enumerate() {
                                 if !used_consumes[idx] && c == t {
@@ -2459,7 +2498,6 @@ impl GameState {
                                 continue;
                             }
 
-                            // Check if this tile is allowed
                             if !forbidden_34.contains(&(t / 4)) {
                                 return true;
                             }
@@ -2493,76 +2531,38 @@ impl GameState {
             // 3. Chi
             let is_shimocha = i == (pid + 1) % 4;
             if !self.riichi_declared[i as usize]
-                && !self.wall.is_empty()
+                && self.wall.len() > 14
                 && is_shimocha
                 && hand.len() >= 3
             {
                 let t_val = tile / 4;
                 if t_val < 27 {
                     let check_chi_kuikae = |c1: u8, c2: u8| -> bool {
-                        // Determine forbidden tiles based on KuikaeMode
                         let mut forbidden_34 = Vec::new();
-                        match self.rule.kuikae_mode {
-                            crate::rule::KuikaeMode::None => {}
-                            mode => {
-                                // SameAndUsed
-                                forbidden_34.push(t_val);
-                                forbidden_34.push(c1 / 4);
-                                forbidden_34.push(c2 / 4);
+                        if !matches!(self.rule.kuikae_mode, crate::rule::KuikaeMode::None) {
+                            forbidden_34.push(t_val);
 
-                                if mode == crate::rule::KuikaeMode::StrictFlank {
-                                    let mut cons_34 = [c1 / 4, c2 / 4];
-                                    cons_34.sort();
+                            if self.rule.kuikae_mode == crate::rule::KuikaeMode::StrictFlank {
+                                let mut cons_34 = [c1 / 4, c2 / 4];
+                                cons_34.sort();
 
-                                    let mut forbid_left = None;
-                                    let mut forbid_right = None;
-
-                                    if cons_34[0] == t_val + 1 && cons_34[1] == t_val + 2 {
-                                        if t_val % 9 >= 1 {
-                                            forbid_left = Some(t_val - 1);
-                                        }
-                                        if t_val % 9 <= 5 {
-                                            forbid_right = Some(t_val + 3);
-                                        }
-                                    } else if t_val >= 2
-                                        && cons_34[1] == t_val - 1
-                                        && cons_34[0] == t_val - 2
-                                    {
-                                        if t_val % 9 >= 3 {
-                                            forbid_left = Some(t_val - 3);
-                                        }
-                                        if t_val % 9 <= 7 {
-                                            forbid_right = Some(t_val + 1);
-                                        }
-                                    } else if t_val >= 1
-                                        && cons_34[0] == t_val - 1
-                                        && cons_34[1] == t_val + 1
-                                    {
-                                        if t_val % 9 >= 2 {
-                                            forbid_left = Some(t_val - 2);
-                                        }
-                                        if t_val % 9 <= 6 {
-                                            forbid_right = Some(t_val + 2);
-                                        }
+                                if cons_34[0] == t_val + 1 && cons_34[1] == t_val + 2 {
+                                    // Taken Low: t, t+1, t+2. Forbidden: t, t+3
+                                    if t_val % 9 <= 5 {
+                                        forbidden_34.push(t_val + 3);
                                     }
-
-                                    let mut flanks = Vec::new();
-                                    if let Some(f) = forbid_left {
-                                        flanks.push(f);
-                                    }
-                                    if let Some(f) = forbid_right {
-                                        flanks.push(f);
-                                    }
-
-                                    // Apply Flank logic
-                                    for f in flanks {
-                                        forbidden_34.push(f);
+                                } else if t_val >= 2
+                                    && cons_34[1] == t_val - 1
+                                    && cons_34[0] == t_val - 2
+                                {
+                                    // Taken High: t-2, t-1, t. Forbidden: t, t-3
+                                    if t_val % 9 >= 3 {
+                                        forbidden_34.push(t_val - 3);
                                     }
                                 }
                             }
                         }
 
-                        // Simulation: Check if any remaining tile is valid
                         let mut used_c1 = false;
                         let mut used_c2 = false;
                         for &t in hand.iter() {

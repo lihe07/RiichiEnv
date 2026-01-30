@@ -54,7 +54,7 @@ class TestChankan:
         res = env.agari_results[1]
         assert res.agari
         # Chankan (ID 3)
-        assert res.yaku == [3]
+        assert 3 in res.yaku, f"Expected Chankan (3) in yaku, got {res.yaku}"
 
     def test_chankan_pass(self):
         """

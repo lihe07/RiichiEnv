@@ -23,13 +23,6 @@ impl AgariCalculator {
     #[new]
     #[pyo3(signature = (tiles_136, melds=vec![]))]
     pub fn new(tiles_136: Vec<u8>, melds: Vec<Meld>) -> Self {
-        if tiles_136.len() == 13 || tiles_136.len() == 14 {
-            // println!(
-            //     "DEBUG: AgariCalculator::new len={} tiles={:?}",
-            //     tiles_136.len(),
-            //     tiles_136
-            // );
-        }
         let mut aka_dora_count = 0;
         let mut tiles_34 = Vec::with_capacity(tiles_136.len());
 
@@ -107,24 +100,13 @@ impl AgariCalculator {
         if current_total == 13 {
             hand_14.add(win_tile_34);
             full_hand_14.add(win_tile_34);
-        } else if current_total != 14 {
-            // Unexpected hand size, but we'll try detection anyway or return false?
-            // Usually it should be 14. If it's 11 (2 melds missing?), etc.
-            // But let's assume it should be 14 for calc.
         }
 
-        if std::env::var("DEBUG").is_ok() {
-            eprintln!(
-                "DEBUG RUST: AgariCalculator::calc win_tile_136={} houtei={} haitei={} tsumo={}",
-                win_tile_136, conditions.houtei, conditions.haitei, conditions.tsumo
-            );
-        }
         let is_agari = agari::is_agari(&mut hand_14);
 
         if !is_agari {
-            return Agari::new(false, false, 0, 0, 0, vec![], 0, 0, None);
+            return Agari::new(false, false, 0, 0, 0, vec![], 0, 0, None, false);
         }
-
         // Count normal doras in 14-tile hand
         let mut dora_count = 0;
         for &indicator_136 in &dora_indicators {
@@ -174,17 +156,12 @@ impl AgariCalculator {
             conditions.tsumo,
             conditions.tsumi,
         );
-
         let has_yaku = yaku_res
             .yaku_ids
             .iter()
             .any(|&id| id != yaku::ID_DORA && id != yaku::ID_AKADORA && id != yaku::ID_URADORA);
 
-        let official_yaku: Vec<u32> = yaku_res
-            .yaku_ids
-            .into_iter()
-            .filter(|&id| id != yaku::ID_DORA && id != yaku::ID_URADORA)
-            .collect();
+        let official_yaku: Vec<u32> = yaku_res.yaku_ids.into_iter().collect();
 
         Agari {
             agari: (has_yaku || yaku_res.yakuman_count > 0) && yaku_res.han >= 1,
@@ -196,6 +173,7 @@ impl AgariCalculator {
             han: yaku_res.han as u32,
             fu: yaku_res.fu as u32,
             pao_payer: None,
+            has_agari_shape: true,
         }
     }
 
