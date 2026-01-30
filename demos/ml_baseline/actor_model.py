@@ -1,5 +1,5 @@
-
 import torch.nn as nn
+
 
 class ResBlock(nn.Module):
     def __init__(self, channels):
@@ -33,7 +33,6 @@ class ActorNetwork(nn.Module):
         
         self.flatten = nn.Flatten()
         
-        # Input to FC: filters * 34 (since we don't pool, 34 tiles remain)
         self.fc1 = nn.Linear(filters * 34, 256)
         self.fc2 = nn.Linear(256, num_actions)
         
@@ -49,5 +48,4 @@ class ActorNetwork(nn.Module):
         out = self.relu(self.fc1(out))
         out = self.fc2(out)
 
-        # Returns unnormalized logits
         return out

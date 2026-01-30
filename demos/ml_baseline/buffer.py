@@ -1,9 +1,9 @@
-
 import torch
 import numpy as np
 from torchrl.data import TensorDictReplayBuffer, LazyTensorStorage, TensorDictPrioritizedReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement, PrioritizedSampler
 from tensordict import TensorDict
+
 
 class GlobalReplayBuffer:
     def __init__(self, 
@@ -26,20 +26,12 @@ class GlobalReplayBuffer:
         
         # 2. Critic Buffer (Prioritized)
         # Keeps long history for CQL
-        try:
-            self.critic_buffer = TensorDictPrioritizedReplayBuffer(
-                storage=LazyTensorStorage(critic_capacity),
-                alpha=0.6,
-                beta=0.4,
-                batch_size=batch_size,
-            )
-        except RuntimeError:
-            print("Warning: PrioritizedReplayBuffer not available (C++ extension missing). Using standard ReplayBuffer.")
-            self.critic_buffer = TensorDictReplayBuffer(
-                storage=LazyTensorStorage(critic_capacity),
-                sampler=SamplerWithoutReplacement(),
-                batch_size=batch_size,
-            )
+        self.critic_buffer = TensorDictPrioritizedReplayBuffer(
+            storage=LazyTensorStorage(critic_capacity),
+            alpha=0.6,
+            beta=0.4,
+            batch_size=batch_size,
+        )
 
     def add(self, transitions: list[dict]):
         """
@@ -49,12 +41,7 @@ class GlobalReplayBuffer:
         if not transitions:
             return
 
-        # Batched conversion: List of Dict -> Dict of Arrays -> TensorDict
-        # This is significantly faster than looping and stacking TensorDicts
-        batch_size = len(transitions)
-        
-        # Pre-allocate dictionaries for stacking
-        # keys: 'features', 'mask', 'action', 'reward', 'done', 'policy_version', 'log_prob'
+        batch_size = len(transitions)        
         batch_data = {
             "features": np.stack([t["features"] for t in transitions]),
             "mask": np.stack([t["mask"] for t in transitions]),
@@ -75,10 +62,7 @@ class GlobalReplayBuffer:
             "log_prob": torch.from_numpy(batch_data["log_prob"]),
         }, batch_size=[batch_size])
         
-        # Add to Actor Buffer (Old data falls off)
         self.actor_buffer.extend(batch)
-        
-        # Add to Critic Buffer (Prioritized)
         self.critic_buffer.extend(batch)
 
     
@@ -101,17 +85,12 @@ class GlobalReplayBuffer:
         if batch_size is None:
             batch_size = self.batch_size
             
-        # TorchRL's Prioritized Replay Buffer automatically adds 'index' and '_weight' 
-        # to the sampled TensorDict if configured correctly.
         batch = self.critic_buffer.sample(batch_size=batch_size).to(self.device)
         
-        # Ensure _weight is 1.0 if not present (fallback)
         if "_weight" not in batch.keys():
             batch["_weight"] = torch.ones(batch_size, device=self.device)
             
         if "index" not in batch.keys():
-             # Create dummy indices if not present (should not happen with prioritized buffer, but safe fallback)
-             # Warning: Updating priority won't work without valid indices.
              batch["index"] = torch.zeros(batch_size, dtype=torch.long, device=self.device)
 
         return batch
