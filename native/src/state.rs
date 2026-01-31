@@ -537,7 +537,7 @@ impl GameState {
         }
     }
 
-    pub fn _get_legal_actions_internal(&mut self, pid: u8) -> Vec<Action> {
+    pub fn _get_legal_actions_internal(&self, pid: u8) -> Vec<Action> {
         // eprintln!("DEBUG: _get_legal_actions_internal pid={}", pid);
         let mut legals = Vec::new();
         let mut hand = self.hands[pid as usize].clone();
