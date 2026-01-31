@@ -55,7 +55,9 @@ class MahjongLearner:
             else:
                 new_state[k] = v
 
-        self.model.load_state_dict(new_state, strict=True)
+        missing, unexpected = self.model.load_state_dict(new_state, strict=True)
+        if missing or unexpected:
+            print(f"Missing: {missing}, Unexpected: {unexpected}")
 
 
     def update_critic(self, batch):
