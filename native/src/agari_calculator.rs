@@ -105,6 +105,8 @@ impl AgariCalculator {
         let is_agari = agari::is_agari(&mut hand_14);
 
         if !is_agari {
+            // has_agari_shape is false here because the hand structure (e.g. 4 melds + 1 pair) is invalid.
+            // If the structure were valid but the hand lacked Yaku, has_agari_shape would be true.
             return Agari::new(false, false, 0, 0, 0, vec![], 0, 0, None, false);
         }
         // Count normal doras in 14-tile hand
