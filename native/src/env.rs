@@ -567,6 +567,7 @@ impl RiichiEnv {
         py: Python<'py>,
         players: Option<Vec<u8>>,
     ) -> PyResult<Py<PyAny>> {
+        // println!("TRACE: get_obs_py(players={:?})", players);
         let obs_map = self.get_observations(players);
         obs_map.into_pyobject(py).map(|o| o.unbind().into())
     }
@@ -611,7 +612,7 @@ impl RiichiEnv {
         self.get_obs_py(py, Some(self.state.active_players.clone()))
     }
 
-    pub fn _get_legal_actions(&self, pid: u8) -> Vec<Action> {
+    pub fn _get_legal_actions(&mut self, pid: u8) -> Vec<Action> {
         self.state._get_legal_actions_internal(pid)
     }
 

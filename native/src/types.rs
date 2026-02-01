@@ -7,15 +7,12 @@ pub const TILE_MAX: usize = 34;
 #[derive(Debug, Clone)]
 pub struct Hand {
     pub counts: [u8; TILE_MAX],
-    // shuntsu_counts removed or ignored? Let's keep it private or ignore for now.
-    pub shuntsu_counts: [u8; TILE_MAX],
 }
 
 impl Hand {
     pub fn new(tiles: Option<Vec<u8>>) -> Self {
         let mut h = Hand {
             counts: [0; TILE_MAX],
-            shuntsu_counts: [0; TILE_MAX],
         };
         if let Some(ts) = tiles {
             for t in ts {
@@ -46,7 +43,6 @@ impl Default for Hand {
     fn default() -> Self {
         Hand {
             counts: [0; TILE_MAX],
-            shuntsu_counts: [0; TILE_MAX],
         }
     }
 }
@@ -227,13 +223,15 @@ pub struct Agari {
     pub fu: u32,
     #[pyo3(get, set)]
     pub pao_payer: Option<u8>,
+    #[pyo3(get, set)]
+    pub has_agari_shape: bool,
 }
 
 #[pymethods]
 impl Agari {
     #[allow(clippy::too_many_arguments)]
     #[new]
-    #[pyo3(signature = (agari, yakuman=false, ron_agari=0, tsumo_agari_oya=0, tsumo_agari_ko=0, yaku=vec![], han=0, fu=0, pao_payer=None))]
+    #[pyo3(signature = (agari, yakuman=false, ron_agari=0, tsumo_agari_oya=0, tsumo_agari_ko=0, yaku=vec![], han=0, fu=0, pao_payer=None, has_agari_shape=false))]
     pub fn new(
         agari: bool,
         yakuman: bool,
@@ -244,6 +242,7 @@ impl Agari {
         han: u32,
         fu: u32,
         pao_payer: Option<u8>,
+        has_agari_shape: bool,
     ) -> Self {
         Self {
             agari,
@@ -255,6 +254,7 @@ impl Agari {
             han,
             fu,
             pao_payer,
+            has_agari_shape,
         }
     }
 }

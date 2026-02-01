@@ -732,19 +732,19 @@ fn apply_static_yaku(res: &mut YakuResult, ctx: &YakuContext) {
         res.han += 1;
         res.yaku_ids.push(ID_TSUMO);
     }
-    if ctx.is_haitei {
+    if ctx.is_haitei && ctx.is_tsumo {
         res.han += 1;
         res.yaku_ids.push(ID_HAITEI);
     }
-    if ctx.is_houtei {
+    if ctx.is_houtei && !ctx.is_tsumo {
         res.han += 1;
         res.yaku_ids.push(ID_HOUTEI);
     }
-    if ctx.is_rinshan {
+    if ctx.is_rinshan && ctx.is_tsumo {
         res.han += 1;
         res.yaku_ids.push(ID_RINSHAN);
     }
-    if ctx.is_chankan {
+    if ctx.is_chankan && !ctx.is_tsumo {
         res.han += 1;
         res.yaku_ids.push(ID_CHANKAN);
     }
