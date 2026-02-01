@@ -221,7 +221,6 @@ mod unit_tests {
 
         // Now set scores > 30000 and trigger draw again.
         // West 1. Oya is 0.
-        // West 1. Oya is 0.
         let new_scores = [31000, 25000, 24000, 20000];
         for (player, &score) in env.state.players.iter_mut().zip(new_scores.iter()) {
             player.score = score;
@@ -279,8 +278,6 @@ mod unit_tests {
         let mut env = create_test_env(4);
         let pid = 0;
 
-        // Hand: 4m, 5m, 6m, 6m. (12, 16, 20, 21)
-        // 3m is 8.
         // Hand: 4m, 5m, 6m, 6m. (12, 16, 20, 21)
         // 3m is 8.
         env.state.players[pid as usize].hand = vec![12, 16, 20, 21];
