@@ -264,8 +264,11 @@ impl GameState {
 
         if !exists {
             return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
-                "Replay desync: Action {:?} is equal to log action {} but not legal.\nSelf State: phase={:?}, drawn={:?}", 
-                env_action, log_action_str, self.phase, self.drawn_tile
+                "Replay desync:\n  Env action: {:?}\n  Log action: {}\n  Self state:\n    phase: {:?}\n    drawn: {:?}",
+                env_action,
+                log_action_str,
+                self.phase,
+                self.drawn_tile
             )));
         }
 
