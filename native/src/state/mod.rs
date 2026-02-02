@@ -1702,7 +1702,7 @@ impl GameState {
         if count < 5 {
             // Base indices for Omote Dora are 4, 6, 8, 10, 12 in the wall
             // Since we use remove(0) for Rinshan draws, the indices shift down.
-            let base_idx = 4 + 2 * count - self.wall.rinshan_draw_count as usize;
+            let base_idx = (4 + 2 * count).saturating_sub(self.wall.rinshan_draw_count as usize);
             if base_idx < self.wall.tiles.len() {
                 self.wall.dora_indicators.push(self.wall.tiles[base_idx]);
                 if !self.skip_mjai_logging {
