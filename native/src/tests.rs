@@ -192,7 +192,6 @@ mod unit_tests {
         env.state.round_wind = 1;
         env.state.kyoku_idx = 3;
         env.state.oya = 3;
-        env.state.oya = 3;
         for i in 0..4 {
             env.state.players[i].score = 25000;
             env.state.players[i].nagashi_eligible = false;
