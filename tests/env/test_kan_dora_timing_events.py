@@ -59,7 +59,9 @@ class TestKanDoraTimingEvents:
 
         # Verify order: ankan → dora → tsumo
         assert dora_after_ankan[0] < tsumo_after_ankan[0], (
-            f"Dora should come before tsumo. Order: ankan@{ankan_idx}, dora@{dora_after_ankan[0]}, tsumo@{tsumo_after_ankan[0]}"
+            f"Dora should come before tsumo. "
+            f"Order: ankan@{ankan_idx}, dora@{dora_after_ankan[0]}, "
+            f"tsumo@{tsumo_after_ankan[0]}"
         )
 
     def test_tenhou_kakan_dora_before_discard(self):
@@ -124,10 +126,14 @@ class TestKanDoraTimingEvents:
 
         # Verify order: kakan → tsumo → dahai → dora
         assert tsumo_after_kakan[0] < dahai_after_kakan[0], (
-            f"Tsumo should come before dahai. Order: kakan@{kakan_idx}, tsumo@{tsumo_after_kakan[0]}, dahai@{dahai_after_kakan[0]}"
+            f"Tsumo should come before dahai. "
+            f"Order: kakan@{kakan_idx}, tsumo@{tsumo_after_kakan[0]}, "
+            f"dahai@{dahai_after_kakan[0]}"
         )
         assert dahai_after_kakan[0] < dora_after_kakan[0], (
-            f"Dahai should come before dora. Order: kakan@{kakan_idx}, tsumo@{tsumo_after_kakan[0]}, dahai@{dahai_after_kakan[0]}, dora@{dora_after_kakan[0]}"
+            f"Dahai should come before dora. "
+            f"Order: kakan@{kakan_idx}, tsumo@{tsumo_after_kakan[0]}, "
+            f"dahai@{dahai_after_kakan[0]}, dora@{dora_after_kakan[0]}"
         )
 
     def test_majsoul_ankan_dora_immediate(self):
@@ -177,5 +183,7 @@ class TestKanDoraTimingEvents:
 
         # Verify order: ankan → dora → tsumo (same as Tenhou for ankan)
         assert dora_after_ankan[0] < tsumo_after_ankan[0], (
-            f"Dora should come before tsumo. Order: ankan@{ankan_idx}, dora@{dora_after_ankan[0]}, tsumo@{tsumo_after_ankan[0]}"
+            f"Dora should come before tsumo. "
+            f"Order: ankan@{ankan_idx}, dora@{dora_after_ankan[0]}, "
+            f"tsumo@{tsumo_after_ankan[0]}"
         )
