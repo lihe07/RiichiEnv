@@ -25,33 +25,36 @@ impl GameStateLegalActions for GameState {
 
             // 1. Tsumo
             if let Some(tile) = self.drawn_tile {
-                let cond = Conditions {
-                    tsumo: true,
-                    riichi: self.players[pid_us].riichi_declared,
-                    double_riichi: self.players[pid_us].double_riichi_declared,
-                    ippatsu: self.players[pid_us].ippatsu_cycle,
-                    player_wind: Wind::from((pid + 4 - self.oya) % 4),
-                    round_wind: Wind::from(self.round_wind),
-                    chankan: false,
-                    haitei: self.wall.tiles.len() <= 14 && !self.is_rinshan_flag,
-                    houtei: false,
-                    rinshan: self.is_rinshan_flag,
-                    tsumo_first_turn: self.is_first_turn
-                        && self.players[pid_us].discards.is_empty(),
-                    kyoutaku: self.riichi_sticks,
-                    tsumi: self.honba as u32,
-                };
-                let mut hand = self.players[pid_us].hand.clone();
-                if let Some(idx) = hand.iter().rposition(|&t| t == tile) {
-                    hand.remove(idx);
-                }
-                let calc = crate::agari_calculator::AgariCalculator::new(
-                    hand,
-                    self.players[pid_us].melds.clone(),
-                );
-                let res = calc.calc(tile, self.wall.dora_indicators.clone(), vec![], Some(cond));
-                if res.agari && (res.yakuman || res.han >= 1) {
-                    legals.push(Action::new(ActionType::Tsumo, Some(tile), vec![]));
+                if !self.players[pid_us].riichi_stage {
+                    let cond = Conditions {
+                        tsumo: true,
+                        riichi: self.players[pid_us].riichi_declared,
+                        double_riichi: self.players[pid_us].double_riichi_declared,
+                        ippatsu: self.players[pid_us].ippatsu_cycle,
+                        player_wind: Wind::from((pid + 4 - self.oya) % 4),
+                        round_wind: Wind::from(self.round_wind),
+                        chankan: false,
+                        haitei: self.wall.tiles.len() <= 14 && !self.is_rinshan_flag,
+                        houtei: false,
+                        rinshan: self.is_rinshan_flag,
+                        tsumo_first_turn: self.is_first_turn
+                            && self.players[pid_us].discards.is_empty(),
+                        kyoutaku: self.riichi_sticks,
+                        tsumi: self.honba as u32,
+                    };
+                    let mut hand = self.players[pid_us].hand.clone();
+                    if let Some(idx) = hand.iter().rposition(|&t| t == tile) {
+                        hand.remove(idx);
+                    }
+                    let calc = crate::agari_calculator::AgariCalculator::new(
+                        hand,
+                        self.players[pid_us].melds.clone(),
+                    );
+                    let res =
+                        calc.calc(tile, self.wall.dora_indicators.clone(), vec![], Some(cond));
+                    if res.agari && (res.yakuman || res.han >= 1) {
+                        legals.push(Action::new(ActionType::Tsumo, Some(tile), vec![]));
+                    }
                 }
             }
 
@@ -80,7 +83,7 @@ impl GameStateLegalActions for GameState {
                 // Riichi check (Only if not already declared)
                 if !self.players[pid_us].riichi_declared
                     && self.players[pid_us].score >= 1000
-                    && self.wall.tiles.len() > 14
+                    && self.wall.tiles.len() >= 18
                     && self.players[pid_us].melds.iter().all(|m| !m.opened)
                     && !self.players[pid_us].riichi_stage
                 {
@@ -112,12 +115,10 @@ impl GameStateLegalActions for GameState {
                 let mut counts = [0; 34];
                 for &t in &self.players[pid_us].hand {
                     let idx = t as usize / 4;
-                    if idx < 34 {
-                        counts[idx] += 1;
-                    }
+                    counts[idx] += 1;
                 }
 
-                if !self.players[pid_us].riichi_declared {
+                if !self.players[pid_us].riichi_declared && !self.players[pid_us].riichi_stage {
                     // Ankan
                     for (t_val, &c) in counts.iter().enumerate() {
                         if c == 4 {
@@ -186,7 +187,7 @@ impl GameStateLegalActions for GameState {
             // In original GameState, melds was [Vec<Meld>; 4]. so self.melds.iter().all... checked all 4 vectors.
             let no_calls = self.players.iter().all(|p| p.melds.is_empty());
 
-            if self.is_first_turn && no_calls {
+            if self.is_first_turn && no_calls && !self.players[pid_us].riichi_stage {
                 let mut distinct_terminals = std::collections::HashSet::new();
                 for &t in &self.players[pid_us].hand {
                     if is_terminal_tile(t) {

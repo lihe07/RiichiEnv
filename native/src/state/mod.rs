@@ -122,6 +122,13 @@ impl GameState {
             last_error: None,
             is_after_kan: false,
         };
+
+        if !state.skip_mjai_logging {
+            let mut ev = serde_json::Map::new();
+            ev.insert("type".to_string(), Value::String("start_game".to_string()));
+            state._push_mjai_event(Value::Object(ev));
+        }
+
         // Initial setup
         state._initialize_round(0, round_wind, 0, 0, None, None);
         state
@@ -130,9 +137,8 @@ impl GameState {
     pub fn reset(&mut self) {
         self.mjai_log = Vec::new();
         self.mjai_log_per_player = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
-        // Note: players, wall, etc are reset in _initialize_round usually,
-        // but reset() implies starting a fresh game or resetting logging?
-        // Original reset() just cleared logs and pushed start_game.
+        self.player_event_counts = [0; 4];
+
         if !self.skip_mjai_logging {
             let mut ev = serde_json::Map::new();
             ev.insert("type".to_string(), Value::String("start_game".to_string()));
@@ -378,7 +384,7 @@ impl GameState {
                     ActionType::Riichi => {
                         // Declare Riichi
                         if self.players[pid as usize].score >= 1000
-                            && self.wall.tiles.len() > 14
+                            && self.wall.tiles.len() >= 18
                             && !self.players[pid as usize].riichi_declared
                         {
                             self.players[pid as usize].riichi_stage = true;
@@ -471,12 +477,30 @@ impl GameState {
                         }
                     }
                     ActionType::Kakan => {
+                        let tile = act.tile.or(act.consume_tiles.first().copied()).unwrap_or(0);
+                        let p_idx = pid as usize;
+
+                        // Update state BEFORE logging/waiting to keep observations in sync
+                        if let Some(idx) = self.players[p_idx].hand.iter().position(|&x| x == tile)
+                        {
+                            self.players[p_idx].hand.remove(idx);
+                        }
+                        for m in self.players[p_idx].melds.iter_mut() {
+                            if m.meld_type == crate::types::MeldType::Peng
+                                && m.tiles[0] / 4 == tile / 4
+                            {
+                                m.meld_type = crate::types::MeldType::Addgang;
+                                m.tiles.push(tile);
+                                m.tiles.sort();
+                                break;
+                            }
+                        }
+
                         // Log Kakan immediately (before Chankan check)
                         if !self.skip_mjai_logging {
                             let mut ev = serde_json::Map::new();
                             ev.insert("type".to_string(), Value::String("kakan".to_string()));
                             ev.insert("actor".to_string(), Value::Number(pid.into()));
-                            let tile = act.tile.unwrap_or(0);
                             ev.insert("pai".to_string(), Value::String(tid_to_mjai(tile)));
                             let cons: Vec<String> =
                                 act.consume_tiles.iter().map(|&t| tid_to_mjai(t)).collect();
@@ -1113,6 +1137,11 @@ impl GameState {
             self.riichi_pending_acceptance = Some(pid);
         }
 
+        while self.wall.pending_kan_dora_count > 0 {
+            self.wall.pending_kan_dora_count -= 1;
+            self._reveal_kan_dora();
+        }
+
         if !self.skip_mjai_logging {
             let mut ev = serde_json::Map::new();
             ev.insert("type".to_string(), Value::String("dahai".to_string()));
@@ -1120,11 +1149,6 @@ impl GameState {
             ev.insert("pai".to_string(), Value::String(tid_to_mjai(tile)));
             ev.insert("tsumogiri".to_string(), Value::Bool(tsumogiri));
             self._push_mjai_event(Value::Object(ev));
-        }
-
-        while self.wall.pending_kan_dora_count > 0 {
-            self.wall.pending_kan_dora_count -= 1;
-            self._reveal_kan_dora();
         }
 
         self.players[pid as usize].missed_agari_doujun = false;
@@ -1171,19 +1195,7 @@ impl GameState {
     pub fn _resolve_kan(&mut self, pid: u8, action: Action) {
         let p_idx = pid as usize;
         if action.action_type == ActionType::Kakan {
-            if let Some(tile) = action.tile {
-                if let Some(idx) = self.players[p_idx].hand.iter().position(|&x| x == tile) {
-                    self.players[p_idx].hand.remove(idx);
-                }
-                for m in self.players[p_idx].melds.iter_mut() {
-                    if m.meld_type == MeldType::Peng && m.tiles[0] / 4 == tile / 4 {
-                        m.meld_type = MeldType::Addgang;
-                        m.tiles.push(tile);
-                        m.tiles.sort();
-                        break;
-                    }
-                }
-            }
+            // Hand and melds were already updated in step() to keep observations in sync
         } else {
             // Ankan / Daiminkan
             for &t in &action.consume_tiles {
@@ -1214,7 +1226,8 @@ impl GameState {
         }
 
         if self.wall.tiles.len() > 14 {
-            let t = self.wall.tiles.pop().unwrap();
+            // Rinshan tiles are at the beginning of the wall vector (0-3)
+            let t = self.wall.tiles.remove(0);
             self.players[p_idx].hand.push(t);
             self.drawn_tile = Some(t);
             self.wall.rinshan_draw_count += 1;
@@ -1250,19 +1263,22 @@ impl GameState {
                         serde_json::to_value(cons_strs).unwrap(),
                     );
                     self._push_mjai_event(Value::Object(ev));
+
+                    if action.action_type == ActionType::Ankan {
+                        self._reveal_kan_dora();
+                    }
                 }
 
+                // Rinshan tsumo logging should apply to Kakan as well
                 let mut t_ev = serde_json::Map::new();
                 t_ev.insert("type".to_string(), Value::String("tsumo".to_string()));
                 t_ev.insert("actor".to_string(), Value::Number(pid.into()));
                 t_ev.insert("pai".to_string(), Value::String(tid_to_mjai(t)));
                 self._push_mjai_event(Value::Object(t_ev));
-            }
 
-            if action.action_type == ActionType::Ankan {
-                self._reveal_kan_dora();
-            } else {
-                self.wall.pending_kan_dora_count += 1;
+                if action.action_type != ActionType::Ankan {
+                    self.wall.pending_kan_dora_count += 1;
+                }
             }
             self.phase = Phase::WaitAct;
             self.active_players = vec![pid];
@@ -1654,6 +1670,8 @@ impl GameState {
     pub fn _reveal_kan_dora(&mut self) {
         let count = self.wall.dora_indicators.len();
         if count < 5 {
+            // Base indices for Omote Dora are 4, 6, 8, 10, 12 in the wall
+            // Since we use remove(0) for Rinshan draws, the indices shift down.
             let base_idx = 4 + 2 * count - self.wall.rinshan_draw_count as usize;
             if base_idx < self.wall.tiles.len() {
                 self.wall.dora_indicators.push(self.wall.tiles[base_idx]);
