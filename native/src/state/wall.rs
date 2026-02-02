@@ -66,7 +66,7 @@ impl WallState {
         self.pending_kan_dora_count = 0;
     }
 
-    // Helper to splitmix64
+    // Load wall tiles from a provided vector (used when manually setting the wall)
     pub fn load_wall(&mut self, tiles: Vec<u8>) {
         // When loading manually (e.g. from event), we don't shuffle or use seed
         // But we expect tiles to be set.
