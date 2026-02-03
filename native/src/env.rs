@@ -652,6 +652,7 @@ impl RiichiEnv {
         self.get_obs_py(py, Some(self.state.active_players.clone()))
     }
 
+    #[pyo3(signature = (event))]
     pub fn apply_mjai_event(&mut self, py: Python, event: Py<PyAny>) -> PyResult<()> {
         // Use python json to dump to string, then parse in rust
         let json = py.import("json")?;
