@@ -48,40 +48,56 @@ class MahjongLearner:
 
     def load_cql_weights(self, path: str):
         """
-        Load weights from an offline CQL model (QNetwork).
-        Old QNetwork architecture: CNN -> fc1(2176->256) -> fc2(256->82)
-        New UnifiedNetwork: CNN -> fc_shared(2176->256) -> actor_head/critic_head(256->82)
+        Load weights from either:
+        1. UnifiedNetwork checkpoint (has actor_head/critic_head) - for fine-tuning
+        2. Offline CQL model (QNetwork with fc1/fc2) - for initial training
 
-        Mapping:
+        UnifiedNetwork architecture: CNN -> fc_shared(2176->256) -> actor_head/critic_head(256->82)
+        Old QNetwork architecture: CNN -> fc1(2176->256) -> fc2(256->82)
+
+        If loading from QNetwork, mapping is:
         - CNN backbone: direct copy
         - fc1 -> fc_shared
         - fc2 -> both actor_head and critic_head (initialize with same weights)
         """
         cql_state = torch.load(path, map_location=self.device)
-        new_state = {}
 
-        for k, v in cql_state.items():
-            if k.startswith("fc1"):
-                # fc1 -> fc_shared
-                new_key = k.replace("fc1", "fc_shared")
-                new_state[new_key] = v
-            elif k.startswith("fc2"):
-                # fc2 -> both actor_head and critic_head
-                actor_key = k.replace("fc2", "actor_head")
-                critic_key = k.replace("fc2", "critic_head")
-                new_state[actor_key] = v
-                new_state[critic_key] = v.clone()  # Clone for critic
-            else:
-                # Copy backbone weights directly (conv_in, bn_in, res_blocks)
-                new_state[k] = v
+        # Check if this is a UnifiedNetwork checkpoint (has actor_head/critic_head)
+        has_unified_keys = any(k.startswith("actor_head") or k.startswith("critic_head") for k in cql_state.keys())
 
-        missing, unexpected = self.model.load_state_dict(new_state, strict=False)
-        print(f"Loaded CQL weights from {path}")
-        print(f"Note: actor_head and critic_head initialized with same fc2 weights")
-        if missing:
-            print(f"Missing keys: {missing}")
-        if unexpected:
-            print(f"Unexpected keys: {unexpected}")
+        if has_unified_keys:
+            # Direct load from UnifiedNetwork checkpoint (fine-tuning case)
+            missing, unexpected = self.model.load_state_dict(cql_state, strict=False)
+            print(f"Loaded UnifiedNetwork weights from {path}")
+            if missing:
+                print(f"Missing keys: {missing}")
+            if unexpected:
+                print(f"Unexpected keys: {unexpected}")
+        else:
+            # Convert from QNetwork format
+            new_state = {}
+            for k, v in cql_state.items():
+                if k.startswith("fc1"):
+                    # fc1 -> fc_shared
+                    new_key = k.replace("fc1", "fc_shared")
+                    new_state[new_key] = v
+                elif k.startswith("fc2"):
+                    # fc2 -> both actor_head and critic_head
+                    actor_key = k.replace("fc2", "actor_head")
+                    critic_key = k.replace("fc2", "critic_head")
+                    new_state[actor_key] = v
+                    new_state[critic_key] = v.clone()  # Clone for critic
+                else:
+                    # Copy backbone weights directly (conv_in, bn_in, res_blocks)
+                    new_state[k] = v
+
+            missing, unexpected = self.model.load_state_dict(new_state, strict=False)
+            print(f"Loaded QNetwork weights from {path} (converted to UnifiedNetwork)")
+            print(f"Note: actor_head and critic_head initialized with same fc2 weights")
+            if missing:
+                print(f"Missing keys: {missing}")
+            if unexpected:
+                print(f"Unexpected keys: {unexpected}")
 
 
     def update_critic(self, batch, max_steps=100000):

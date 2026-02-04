@@ -59,6 +59,9 @@ class TestActionToMjaiFormat:
             0,  # kyoku_index
             [],  # waits
             False,  # is_tenpai
+            [None] * 4,  # riichi_sutehais
+            [None] * 4,  # last_tedashis
+            None,  # last_discard
         )
 
         mjai_dict = {"type": "dahai", "pai": "5p"}

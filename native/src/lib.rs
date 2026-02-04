@@ -13,9 +13,9 @@ mod observation;
 mod parser;
 mod replay;
 mod rule;
+mod shanten;
 mod state;
 mod yaku_checker;
-mod shanten;
 
 #[pyfunction]
 fn check_riichi_candidates(tiles_136: Vec<u8>) -> Vec<u32> {

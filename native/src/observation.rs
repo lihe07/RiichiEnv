@@ -21,12 +21,12 @@ fn get_next_tile(tile: u32) -> u8 {
     } else {
         // Honor tiles (winds 27-30, dragons 31-33)
         let base = tile / 4;
-        if base >= 27 && base < 31 {
+        if (27..31).contains(&base) {
             // Winds: E->S->W->N->E
             let wind_idx = base - 27;
             let next_wind = (wind_idx + 1) % 4;
             ((27 + next_wind) * 4) as u8
-        } else if base >= 31 && base < 34 {
+        } else if (31..34).contains(&base) {
             // Dragons: White->Green->Red->White
             let dragon_idx = base - 31;
             let next_dragon = (dragon_idx + 1) % 3;
@@ -529,12 +529,8 @@ impl Observation {
 
             // Yaku 1-3: Yakuhai (dragons: White=31, Green=32, Red=33)
             for (yaku_idx, &tile_type) in [31, 32, 33].iter().enumerate() {
-                let yakuhai = yaku_checker::check_yakuhai(
-                    tile_type,
-                    melds,
-                    discards,
-                    &self.dora_indicators,
-                );
+                let yakuhai =
+                    yaku_checker::check_yakuhai(tile_type, melds, discards, &self.dora_indicators);
                 arr[[player_idx, 1 + yaku_idx, 0]] = yakuhai.to_f32();
                 arr[[player_idx, 1 + yaku_idx, 1]] = yakuhai.to_f32();
             }
@@ -553,12 +549,8 @@ impl Observation {
             // Yaku 5: Yakuhai (seat wind)
             let seat = (player_idx as u8 + 4 - self.oya) % 4;
             let seat_wind_type = 27 + seat as usize;
-            let yakuhai_seat = yaku_checker::check_yakuhai(
-                seat_wind_type,
-                melds,
-                discards,
-                &self.dora_indicators,
-            );
+            let yakuhai_seat =
+                yaku_checker::check_yakuhai(seat_wind_type, melds, discards, &self.dora_indicators);
             arr[[player_idx, 5, 0]] = yakuhai_seat.to_f32();
             arr[[player_idx, 5, 1]] = yakuhai_seat.to_f32();
 
@@ -580,8 +572,7 @@ impl Observation {
             arr[[player_idx, 9, 1]] = 0.0; // Chiitoitsu cannot win by ron in most rules
 
             // Yaku 10: Shousangen
-            let shousangen =
-                yaku_checker::check_shousangen(melds, discards, &self.dora_indicators);
+            let shousangen = yaku_checker::check_shousangen(melds, discards, &self.dora_indicators);
             arr[[player_idx, 10, 0]] = shousangen.to_f32();
             arr[[player_idx, 10, 1]] = shousangen.to_f32();
 
@@ -898,7 +889,7 @@ impl Observation {
         // 19. Dora Count (55-58) - per player, rescaled
         let mut dora_counts = [0u8; 4];
         // Count dora in each player's visible tiles (melds + discards)
-        for player_idx in 0..4 {
+        for (player_idx, dora_count) in dora_counts.iter_mut().enumerate() {
             // Melds
             if player_idx < self.melds.len() {
                 for meld in &self.melds[player_idx] {
@@ -907,7 +898,7 @@ impl Observation {
                         for &dora_ind in &self.dora_indicators {
                             let dora_tile = get_next_tile(dora_ind);
                             if (tile / 4) == (dora_tile / 4) {
-                                dora_counts[player_idx] += 1;
+                                *dora_count += 1;
                             }
                         }
                     }
@@ -920,7 +911,7 @@ impl Observation {
                     for &dora_ind in &self.dora_indicators {
                         let dora_tile = get_next_tile(dora_ind);
                         if ((tile / 4) as u8) == (dora_tile / 4) {
-                            dora_counts[player_idx] += 1;
+                            *dora_count += 1;
                         }
                     }
                 }
@@ -1014,7 +1005,9 @@ impl Observation {
         // 25. Tsumogiri flags (70-73) - broadcast per player
         // 1.0 if last discard was tsumogiri (drawn and immediately discarded)
         for player_idx in 0..4 {
-            if player_idx < self.tsumogiri_flags.len() && !self.tsumogiri_flags[player_idx].is_empty() {
+            if player_idx < self.tsumogiri_flags.len()
+                && !self.tsumogiri_flags[player_idx].is_empty()
+            {
                 let last_tsumogiri = *self.tsumogiri_flags[player_idx].last().unwrap_or(&false);
                 let val = if last_tsumogiri { 1.0 } else { 0.0 };
                 for k in 0..34 {
@@ -1053,14 +1046,14 @@ impl Observation {
         // Collect all visible tiles for ukire calculation
         let mut all_visible: Vec<u32> = Vec::new();
         for discs in &self.discards {
-            all_visible.extend(discs.iter().map(|&x| x as u32));
+            all_visible.extend(discs.iter().copied());
         }
         for melds_list in &self.melds {
             for meld in melds_list {
                 all_visible.extend(meld.tiles.iter().map(|&x| x as u32));
             }
         }
-        all_visible.extend(self.dora_indicators.iter().map(|&x| x as u32));
+        all_visible.extend(self.dora_indicators.iter().copied());
 
         // Calculate features for each player
         for player_idx in 0..4 {

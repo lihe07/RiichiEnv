@@ -368,4 +368,51 @@ mod unit_tests {
         assert!(res9p.agari, "9p should be Agari");
         assert!(res9p.han >= 3, "9p should be Junchan (>= 3 Han)"); // Junchan (3)
     }
+
+    #[test]
+    fn test_tobi_ends_game() {
+        // Test that the game ends when a player goes below 0 points (tobi/bankruptcy)
+        let mut env = create_test_env(4);
+        env.state.game_mode = 2; // 4p-red-half (Hanchan)
+
+        // Set scores with one player having negative score
+        env.state.players[0].score = 30000;
+        env.state.players[1].score = 40000;
+        env.state.players[2].score = 35000;
+        env.state.players[3].score = -5000; // Negative score - should trigger tobi
+
+        env.state.needs_initialize_next_round = false;
+
+        // Try to initialize next round - should end game due to tobi
+        env.state._initialize_next_round(false, false);
+
+        assert!(
+            env.state.is_done,
+            "Game should be done due to tobi (player with negative score)"
+        );
+    }
+
+    #[test]
+    fn test_no_tobi_with_positive_scores() {
+        // Test that the game continues when all players have positive scores
+        let mut env = create_test_env(4);
+        env.state.game_mode = 2; // 4p-red-half (Hanchan)
+        env.state.round_wind = 0; // East round
+
+        // Set scores with all players having positive scores
+        env.state.players[0].score = 25000;
+        env.state.players[1].score = 25000;
+        env.state.players[2].score = 25000;
+        env.state.players[3].score = 25000;
+
+        env.state.needs_initialize_next_round = false;
+
+        // Try to initialize next round - should NOT end game
+        env.state._initialize_next_round(false, false);
+
+        assert!(
+            !env.state.is_done,
+            "Game should NOT be done (all players have positive scores)"
+        );
+    }
 }

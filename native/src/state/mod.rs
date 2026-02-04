@@ -68,8 +68,8 @@ pub struct GameState {
     pub is_after_kan: bool,
 
     // New fields for Mortal-inspired features
-    pub riichi_sutehais: [Option<u8>; 4],      // Tile discarded when declaring riichi
-    pub last_tedashis: [Option<u8>; 4],        // Last hand discard (not tsumogiri)
+    pub riichi_sutehais: [Option<u8>; 4], // Tile discarded when declaring riichi
+    pub last_tedashis: [Option<u8>; 4],   // Last hand discard (not tsumogiri)
 }
 
 impl GameState {
@@ -1382,6 +1382,12 @@ impl GameState {
 
     pub fn _initialize_next_round(&mut self, oya_won: bool, is_draw: bool) {
         if self.is_done {
+            return;
+        }
+
+        // Tobi (bankruptcy) check: game ends if any player has negative score
+        if self.players.iter().any(|p| p.score < 0) {
+            self._process_end_game();
             return;
         }
 
