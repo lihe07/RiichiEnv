@@ -142,39 +142,44 @@ impl GameStateLegalActions for GameState {
                             }
                         }
                     }
-                } else if let Some(t) = self.drawn_tile {
-                    let t34 = t / 4;
-                    if counts[t34 as usize] == 4 {
-                        // Check waits
-                        let mut hand_pre = self.players[pid_us].hand.clone();
-                        if let Some(pos) = hand_pre.iter().position(|&x| x == t) {
-                            hand_pre.remove(pos);
-                        }
-                        let calc_pre = crate::agari_calculator::AgariCalculator::new(
-                            hand_pre,
-                            self.players[pid_us].melds.clone(),
-                        );
-                        let mut waits_pre = calc_pre.get_waits();
-                        waits_pre.sort();
+                } else if self.players[pid_us].riichi_declared {
+                    // Ankan is only allowed after riichi is declared (not during riichi_stage)
+                    // and only if it doesn't change the waits
+                    if let Some(t) = self.drawn_tile {
+                        let t34 = t / 4;
+                        if counts[t34 as usize] == 4 {
+                            // Check waits
+                            let mut hand_pre = self.players[pid_us].hand.clone();
+                            if let Some(pos) = hand_pre.iter().position(|&x| x == t) {
+                                hand_pre.remove(pos);
+                            }
+                            let calc_pre = crate::agari_calculator::AgariCalculator::new(
+                                hand_pre,
+                                self.players[pid_us].melds.clone(),
+                            );
+                            let mut waits_pre = calc_pre.get_waits();
+                            waits_pre.sort();
 
-                        let mut hand_post = self.players[pid_us].hand.clone();
-                        hand_post.retain(|&x| x / 4 != t34);
-                        let mut melds_post = self.players[pid_us].melds.clone();
-                        let lowest = t34 * 4;
-                        melds_post.push(Meld::new(
-                            MeldType::Angang,
-                            vec![lowest, lowest + 1, lowest + 2, lowest + 3],
-                            false,
-                            -1,
-                        ));
-                        let calc_post =
-                            crate::agari_calculator::AgariCalculator::new(hand_post, melds_post);
-                        let mut waits_post = calc_post.get_waits();
-                        waits_post.sort();
+                            let mut hand_post = self.players[pid_us].hand.clone();
+                            hand_post.retain(|&x| x / 4 != t34);
+                            let mut melds_post = self.players[pid_us].melds.clone();
+                            let lowest = t34 * 4;
+                            melds_post.push(Meld::new(
+                                MeldType::Angang,
+                                vec![lowest, lowest + 1, lowest + 2, lowest + 3],
+                                false,
+                                -1,
+                            ));
+                            let calc_post = crate::agari_calculator::AgariCalculator::new(
+                                hand_post, melds_post,
+                            );
+                            let mut waits_post = calc_post.get_waits();
+                            waits_post.sort();
 
-                        if waits_pre == waits_post && !waits_pre.is_empty() {
-                            let consume = vec![lowest, lowest + 1, lowest + 2, lowest + 3];
-                            legals.push(Action::new(ActionType::Ankan, Some(lowest), consume));
+                            if waits_pre == waits_post && !waits_pre.is_empty() {
+                                let consume = vec![lowest, lowest + 1, lowest + 2, lowest + 3];
+                                legals.push(Action::new(ActionType::Ankan, Some(lowest), consume));
+                            }
                         }
                     }
                 }
