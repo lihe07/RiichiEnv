@@ -7,27 +7,21 @@ from tensordict import TensorDict
 
 class GlobalReplayBuffer:
     def __init__(self,
-                 actor_capacity: int = 50000,   # Increased: ~250 episodes
-                 critic_capacity: int = 1000000, # Increased: ~5000 episodes for better offline-to-online transition
+                 actor_capacity: int = 50000,
+                 critic_capacity: int = 1000000,
                  batch_size: int = 32,
                  device: str = "cpu"):
 
         self.device = torch.device(device)
         self.batch_size = batch_size
 
-        # 1. Actor Buffer (FIFO / Sliding Window)
-        # Keeps only recent data for PPO (on-policy)
-        # Using LazyTensorStorage (In-Memory) for performance
-        # Note: batch_size parameter in TensorDictReplayBuffer is NOT the sampling batch size
-        # It's ignored when using LazyTensorStorage
+        # Actor Buffer (FIFO / Sliding Window)
         self.actor_buffer = TensorDictReplayBuffer(
             storage=LazyTensorStorage(actor_capacity),
             sampler=SamplerWithoutReplacement(),
         )
 
-        # 2. Critic Buffer (Standard Replay Buffer)
-        # Note: Using standard buffer instead of prioritized due to SumSegmentTreeFp32 build issues
-        # Keeps long history for CQL (offline + online data)
+        # Critic Buffer (Standard Replay Buffer)
         self.critic_buffer = TensorDictReplayBuffer(
             storage=LazyTensorStorage(critic_capacity),
             sampler=SamplerWithoutReplacement(),
@@ -37,7 +31,6 @@ class GlobalReplayBuffer:
         """
         Adds a list of transitions to both buffers.
         Optimized: Creates a single TensorDict for the whole episode at once.
-        Features are legacy (46, 34) numpy arrays.
         """
         if not transitions:
             return
