@@ -28,16 +28,12 @@ class GlobalReplayBuffer:
         )
 
     def add(self, transitions: list[dict]):
-        """
-        Adds a list of transitions to both buffers.
-        Optimized: Creates a single TensorDict for the whole episode at once.
-        """
+        """Adds a list of transitions to both buffers."""
         if not transitions:
             return
 
         batch_size = len(transitions)
 
-        # Stack legacy features (46, 34)
         features = np.stack([t["features"] for t in transitions])
 
         batch_data = {
@@ -60,42 +56,14 @@ class GlobalReplayBuffer:
         self.actor_buffer.extend(batch)
         self.critic_buffer.extend(batch)
 
-    def update_beta(self, beta: float):
-        """Update beta for Importance Sampling"""
-        if hasattr(self.critic_buffer, "_sampler") and hasattr(self.critic_buffer._sampler, "_beta"):
-             self.critic_buffer._sampler._beta = beta
-
     def sample_actor(self, batch_size=None):
-        """Sample from recent data (PPO)"""
+        """Sample from recent data."""
         if batch_size is None:
             batch_size = self.batch_size
         return self.actor_buffer.sample(batch_size=batch_size).to(self.device)
 
     def sample_critic(self, batch_size=None):
-        """
-        Sample from historical data (CQL) with Importance Sampling.
-        Returns TensorDict with 'index' and '_weight' keys if using prioritized buffer.
-        """
+        """Sample from historical data (CQL)."""
         if batch_size is None:
             batch_size = self.batch_size
-
-        batch = self.critic_buffer.sample(batch_size=batch_size).to(self.device)
-
-        # Get actual batch size from sampled data
-        actual_batch_size = batch.batch_size[0]
-
-        # Create new TensorDict with additional keys to avoid batch size mismatch
-        if "_weight" not in batch.keys() or "index" not in batch.keys():
-            batch_dict = {k: v for k, v in batch.items()}
-            if "_weight" not in batch.keys():
-                batch_dict["_weight"] = torch.ones(actual_batch_size, device=self.device)
-            if "index" not in batch.keys():
-                batch_dict["index"] = torch.zeros(actual_batch_size, dtype=torch.long, device=self.device)
-            batch = TensorDict(batch_dict, batch_size=[actual_batch_size])
-
-        return batch
-
-    def update_priority(self, index, priority):
-        """Update priorities for Critic Buffer"""
-        if hasattr(self.critic_buffer, "update_priority"):
-            self.critic_buffer.update_priority(index, priority)
+        return self.critic_buffer.sample(batch_size=batch_size).to(self.device)

@@ -98,53 +98,38 @@ class MahjongLearner:
 
 
     def update_critic(self, batch, max_steps=100000):
-        """
-        CQL Update using a batch from Critic Buffer (Historical/Offline + Online).
-        Batch keys: features, action, reward, mask, next_features (if valid), done, index, _weight
-        """
-        # Get features as tensor (B, 46, 34)
+        """CQL Update using a batch from Critic Buffer."""
         features = batch["features"].to(self.device)
-
-        actions = batch["action"].long().to(self.device) # (B) or (B,1)
-        targets = batch["reward"].float().to(self.device) # G_t
+        actions = batch["action"].long().to(self.device)
+        targets = batch["reward"].float().to(self.device)
         masks = batch["mask"].float().to(self.device)
-        weights = batch["_weight"].float().to(self.device)
-        indices = batch["index"].long().to(self.device)
 
         if actions.dim() == 1:
             actions = actions.unsqueeze(1)
         if targets.dim() > 1:
             targets = targets.squeeze()
 
-        # Dynamic CQL alpha scheduling: decrease as online learning progresses
+        # Dynamic CQL alpha scheduling
         progress = min(1.0, self.total_steps / max_steps)
         alpha_cql = self.alpha_cql_init + progress * (self.alpha_cql_final - self.alpha_cql_init)
 
-        # Clear gradients before forward pass
         self.optimizer.zero_grad()
 
-        # 1. Forward Pass
-        # We only care about Q-values here, but forward returns both
-        _, q_values = self.model(features) # (B, 82)
+        _, q_values = self.model(features)
+        q_data = q_values.gather(1, actions).squeeze(1)
 
-        q_data = q_values.gather(1, actions).squeeze(1) # (B)
-
-        # 2. CQL Loss: logsumexp(Q) - Q_data
+        # CQL Loss: logsumexp(Q) - Q_data
         invalid_mask = (masks == 0)
         q_masked = q_values.clone()
         q_masked = q_masked.masked_fill(invalid_mask, -1e9)
-        logsumexp_q = torch.logsumexp(q_masked, dim=1) # (B)
+        logsumexp_q = torch.logsumexp(q_masked, dim=1)
+        cql_term = logsumexp_q - q_data
 
-        cql_term = (logsumexp_q - q_data) # (B)
+        # MSE Loss
+        mse_term = self.mse_loss(q_data, targets)
 
-        # 3. Bellman/MC Error
-        # Loss = (Q - G_t)^2
-        mse_term = self.mse_loss(q_data, targets) # (B)
-
-        # 4. Total Loss & IS Weights
-        # Loss = mean( (MSE + alpha*CQL) * weight )
-        raw_loss = mse_term + alpha_cql * cql_term
-        loss = (raw_loss * weights).mean()
+        # Total Loss
+        loss = (mse_term + alpha_cql * cql_term).mean()
 
         if torch.isnan(loss):
             return {
@@ -153,38 +138,21 @@ class MahjongLearner:
                 "critic/cql_alpha": alpha_cql,
                 "critic/mse": 0.0,
                 "critic/q_mean": 0.0,
-                "critic/mc_error": 0.0,
-                "critic/advantage": 0.0,
-            }, indices, torch.ones_like(targets)
+            }
 
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=10.0)
         self.optimizer.step()
 
         self.total_steps += 1
-        
-        # 5. Priority Calculation
-        with torch.no_grad():
-            # MC Error = |Q - G_t|
-            mc_error = torch.abs(q_data - targets)
-
-            # Advantage = |G_t - V(s)| approx |G_t - max Q|
-            # Note: q_masked handles invalid actions
-            max_q, _ = q_masked.max(dim=1)
-            advantage = torch.abs(targets - max_q)
-
-            # Priority = MC_Error + Advantage + epsilon
-            new_priorities = mc_error + advantage + 1e-6
 
         return {
             "critic/loss": loss.item(),
-            "critic/cql": (cql_term * weights).mean().item(),
+            "critic/cql": cql_term.mean().item(),
             "critic/cql_alpha": alpha_cql,
-            "critic/mse": (mse_term * weights).mean().item(),
+            "critic/mse": mse_term.mean().item(),
             "critic/q_mean": q_data.mean().item(),
-            "critic/mc_error": mc_error.mean().item(),
-            "critic/advantage": advantage.mean().item(),
-        }, indices, new_priorities
+        }
 
     def update_actor(self, batch):
         """

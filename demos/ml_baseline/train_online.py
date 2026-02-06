@@ -202,14 +202,8 @@ def proper_loop(args):
             # Update Critic (using historical data)
             if len(buffer.critic_buffer) > args.batch_size:
                 c_batch = buffer.sample_critic(args.batch_size)
-
-                # Update with Priority Logic and dynamic CQL alpha
-                # update_critic returns (metrics, indices, priorities)
-                c_metrics, indices, priorities = learner.update_critic(c_batch, max_steps=args.num_steps)
+                c_metrics = learner.update_critic(c_batch, max_steps=args.num_steps)
                 metrics.update(c_metrics)
-
-                # Feedback priorities to buffer
-                buffer.update_priority(indices, priorities)
 
             # Update Actor (AWAC is off-policy, can use same data as critic)
             if len(buffer.actor_buffer) > args.batch_size:
