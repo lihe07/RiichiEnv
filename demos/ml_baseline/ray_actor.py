@@ -17,7 +17,6 @@ class MahjongWorker:
         self.env = RiichiEnv(game_mode="4p-red-half")
         self.gamma = gamma
 
-        # Policy Model (Unified) with legacy feature dimensions (46 channels)
         self.model = UnifiedNetwork(num_actions=82).to(self.device)
         self.model.eval()
 
@@ -25,19 +24,9 @@ class MahjongWorker:
         """Syncs weights from the Learner."""
         self.model.load_state_dict(state_dict)
 
-        # Check for NaN in weights after loading
-        has_nan = False
-        for name, param in self.model.named_parameters():
-            if torch.isnan(param).any():
-                print(f"ERROR: Worker {self.worker_id} received NaN weights in {name}")
-                has_nan = True
-
-        if has_nan:
-            print(f"WARNING: Worker {self.worker_id} has NaN weights after sync")
 
     def _encode_obs(self, obs):
-        """Encodes Rust observation using legacy features (46, 34)."""
-        # Use legacy encoding (46 channels only)
+        """Encodes Rust observation."""
         feat = ObservationEncoder.encode_legacy(obs)
         mask = np.frombuffer(obs.mask(), dtype=np.uint8).copy()
 
@@ -85,15 +74,9 @@ class MahjongWorker:
                     logits, _ = self.model(feat_batch)  # (1, 82)
                     logits = logits.masked_fill(mask_tensor.unsqueeze(0) == 0, -1e9)
 
-                    # Check for NaN in logits
                     if torch.isnan(logits).any():
-                        print(f"ERROR: NaN detected in worker {self.worker_id} logits")
-                        print(f"  logits: {logits}")
-                        print(f"  Falling back to random legal action")
-                        # Use random legal action as fallback
                         action_idx = np.random.choice([i for i, m in enumerate(mask_tensor.cpu().numpy()) if m > 0])
-                        # Store dummy log_prob
-                        log_prob_value = -2.0  # Approximate uniform log prob
+                        log_prob_value = -2.0
                     else:
                         dist = Categorical(logits=logits)
                         action = dist.sample()

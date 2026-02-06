@@ -89,8 +89,6 @@ def evaluate_vs_baseline(hero_model, baseline_model, device, num_episodes=30):
 
 
 def proper_loop(args):
-    # Set working_dir to demos/ml_baseline (Current Directory)
-    # Explicitly pass current sys.path to workers
     python_path = ":".join(sys.path)
     current_dir = os.path.dirname(os.path.abspath(__file__))
     
@@ -123,17 +121,13 @@ def proper_loop(args):
         baseline_learner.load_cql_weights(args.load_model)
         baseline_learner.model.eval() # Freeze baseline
 
-    # AWAC is off-policy: use unified buffer (same capacity for actor and critic)
     buffer = GlobalReplayBuffer(
         batch_size=args.batch_size,
         device=args.device,
-        actor_capacity=args.critic_capacity,  # Unified buffer
+        actor_capacity=args.critic_capacity,
         critic_capacity=args.critic_capacity,
     )
-    # Distribute workers across GPUs if available
-    # Each worker gets a fraction of GPU memory
     if args.worker_device == "cuda":
-        # Assign workers to GPU with memory fraction
         workers = [
             MahjongWorker.options(num_gpus=args.gpu_per_worker).remote(i, "cuda", gamma=0.99)
             for i in range(args.num_workers)
@@ -247,7 +241,6 @@ def proper_loop(args):
                 # Update the worker that just finished
                 workers[worker_idx].update_weights.remote(weight_ref)
             else:
-                # Just re-dispatch without weight update for efficiency
                 pass
             
             new_future = workers[worker_idx].collect_episode.remote()

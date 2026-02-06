@@ -5,7 +5,6 @@ from riichienv import Action, ActionType, Observation
 
 class TestActionToMjaiFormat:
     def test_action_to_mjai_dahai(self):
-        # TODO: Impl tsumogiri flag
         act = Action(ActionType.Discard, tile=53)
         mjai = act.to_mjai()
         assert json.loads(mjai) == {"type": "dahai", "pai": "5p"}

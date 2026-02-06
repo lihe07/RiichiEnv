@@ -60,7 +60,6 @@ class GlobalReplayBuffer:
         self.actor_buffer.extend(batch)
         self.critic_buffer.extend(batch)
 
-    
     def update_beta(self, beta: float):
         """Update beta for Importance Sampling"""
         if hasattr(self.critic_buffer, "_sampler") and hasattr(self.critic_buffer._sampler, "_beta"):

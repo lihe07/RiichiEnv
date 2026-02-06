@@ -41,9 +41,7 @@ def test_honba_reset_on_ko_win():
     env.step({1: Action(ActionType.Ron, 25, [])})
 
     # Transition to end state
-    print(f"DEBUG: Honba before next step: {env.honba}")
-    env.step({})  # Trigger initialization
-    print(f"DEBUG: Honba after win: {env.honba}")
+    env.step({})
 
     assert env.honba == 0, f"Honba should reset to 0 after Ko Ron win, but got {env.honba}"
     assert env.oya == 1, f"Oya should rotate to 1, got {env.oya}"
@@ -69,10 +67,7 @@ def test_honba_increment_on_oya_win():
 
     env.step({0: Action(ActionType.Tsumo)})
 
-    # Trigger initialization
     env.step({})
-
-    print(f"DEBUG: Honba after Oya win: {env.honba}")
 
     assert env.honba == 6, f"Honba should increment to 6 after Oya win, but got {env.honba}"
     assert env.oya == 0, f"Oya should remain 0, got {env.oya}"

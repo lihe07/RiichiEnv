@@ -24,11 +24,8 @@ class MahjongLearner:
         self.awac_beta = awac_beta
         self.awac_max_weight = awac_max_weight
 
-        # Model with legacy 46-channel features
         self.model = UnifiedNetwork(num_actions=82).to(self.device)
 
-        # Unified optimizer with parameter groups
-        # Actor head gets actor_lr, critic head gets critic_lr, shared backbone gets average
         shared_lr = (actor_lr + critic_lr) / 2.0
 
         self.optimizer = optim.Adam([
@@ -149,14 +146,7 @@ class MahjongLearner:
         raw_loss = mse_term + alpha_cql * cql_term
         loss = (raw_loss * weights).mean()
 
-        # Check for NaN in loss
         if torch.isnan(loss):
-            print(f"WARNING: NaN detected in critic loss at step {self.total_steps}")
-            print(f"  q_data: min={q_data.min().item()}, max={q_data.max().item()}, mean={q_data.mean().item()}")
-            print(f"  targets: min={targets.min().item()}, max={targets.max().item()}, mean={targets.mean().item()}")
-            print(f"  mse_term: min={mse_term.min().item()}, max={mse_term.max().item()}, mean={mse_term.mean().item()}")
-            print(f"  cql_term: min={cql_term.min().item()}, max={cql_term.max().item()}, mean={cql_term.mean().item()}")
-            # Skip this update
             return {
                 "critic/loss": 0.0,
                 "critic/cql": 0.0,
@@ -238,14 +228,7 @@ class MahjongLearner:
         actor_loss = -(new_log_probs * weights.detach()).mean()
         loss = actor_loss - 0.01 * entropy
 
-        # Check for NaN in loss
         if torch.isnan(loss):
-            print(f"WARNING: NaN detected in actor loss at step {self.total_steps}")
-            print(f"  logits: min={logits.min().item()}, max={logits.max().item()}, mean={logits.mean().item()}")
-            print(f"  new_log_probs: min={new_log_probs.min().item()}, max={new_log_probs.max().item()}")
-            print(f"  advantages: min={advantages.min().item()}, max={advantages.max().item()}")
-            print(f"  weights: min={weights.min().item()}, max={weights.max().item()}")
-            # Skip this update
             return {
                 "actor/loss": 0.0,
                 "actor/entropy": 0.0,
