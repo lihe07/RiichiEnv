@@ -67,7 +67,6 @@ pub struct GameState {
     pub last_error: Option<String>,
     pub is_after_kan: bool,
 
-    // New fields for Mortal-inspired features
     pub riichi_sutehais: [Option<u8>; 4], // Tile discarded when declaring riichi
     pub last_tedashis: [Option<u8>; 4],   // Last hand discard (not tsumogiri)
 }
