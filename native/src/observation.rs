@@ -9,7 +9,7 @@ use crate::yaku_checker;
 use ndarray::prelude::*;
 
 /// Get the next tile in sequence for dora calculation
-/// Tile encoding: 0-35 for m1-m9, p1-p9, s1-s9, winds, dragons
+/// Tile type: 0-33 (m1-m9: 0-8, p1-p9: 9-17, s1-s9: 18-26, winds: 27-30, dragons: 31-33)
 fn get_next_tile(tile: u32) -> u8 {
     let tile_type = (tile / 4) / 9; // 0=man, 1=pin, 2=sou, 3+=honors
     let tile_num = (tile / 4) % 9;
