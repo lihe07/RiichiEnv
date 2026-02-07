@@ -255,11 +255,10 @@ class MortalEngine:
         except Exception as ex:
             raise Exception(f'{ex}\n{traceback.format_exc()}')
 
-    def _react_batch(self, obs, masks, invisible_obs):
+    def _react_batch(self, obs, masks, invisible_obs = None):
         obs = torch.as_tensor(np.stack(obs, axis=0), device=self.device)
         masks = torch.as_tensor(np.stack(masks, axis=0), device=self.device)
-        if invisible_obs is not None:
-            invisible_obs = torch.as_tensor(np.stack(invisible_obs, axis=0), device=self.device)
+        assert invisible_obs is None
         batch_size = obs.shape[0]
 
         phi = self.brain(obs)
