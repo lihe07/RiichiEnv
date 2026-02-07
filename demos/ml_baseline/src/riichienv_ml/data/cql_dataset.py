@@ -98,6 +98,7 @@ class MCDataset(BaseDataset):
                         # Compute Final Reward for this Kyoku
                         assert self.reward_predictor is not None
                         _, final_reward = self.reward_predictor.calc_pts_rewards([grp_features], player_id)
+                        final_reward = final_reward.detach().cpu().item()
 
                         # Collect Trajectory
                         for obs, action in kyoku.steps(player_id):
