@@ -204,6 +204,17 @@ class TestRiichiSequenceHandling:
         assert dahai_action is not None, f"Should be able to select dahai action. Legals: {new_legals}"
         assert dahai_action.action_type == ActionType.Discard, "Action type should be Discard"
 
+        # Step the env with the dahai action to complete the reach→dahai sequence
+        env.step({3: dahai_action})
+
+        # After the discard following reach, riichi should now be fully declared
+        assert env.riichi_declared[3] is True, "riichi_declared should be True after reach+dahai"
+        assert env.riichi_stage[3] is False, "riichi_stage should be False after dahai completes"
+
+        # Riichi deposit: 1000 pts deducted
+        scores = env.scores()
+        assert scores[3] == 24000, f"Score should be 24000 after 1000pt riichi deposit, got {scores[3]}"
+
     def test_legal_actions_consistency_with_mortal_state(self) -> None:
         """
         Test that legal_actions is consistent with what Mortal expects after reach.
